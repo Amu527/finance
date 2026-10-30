@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三金小本买卖 · 记账台</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  input, select{outline:none}
+  .card{background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+  .tab{transition:all .2s}
+  .tab.active{background:#16a34a;color:#fff;box-shadow:0 4px 10px rgba(22,163,74,.3)}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-size:12px}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+  .fade{animation:fade .3s}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<div class="max-w-6xl mx-auto p-4 md:p-6">
+
+  <!-- 头部 -->
+  <header class="flex flex-wrap items-center justify-between gap-3 mb-5">
+    <div class="flex items-center gap-3">
+      <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-xl shadow-lg shadow-green-200">🥘</div>
+      <div>
+        <h1 class="text-xl font-bold text-gray-800">三金小本买卖</h1>
+        <p class="text-xs text-gray-500">今日：<span id="todayStr"></span> · 数据自动保存在本机</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- 顶部概览卡片 -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 fade">
+    <div class="card p-4 border-l-4 border-red-400">
+      <p class="text-xs text-gray-500">总支出</p>
+      <p class="text-2xl font-bold text-red-500"><span id="ovBuy">0</span><span class="text-sm font-normal"> 元</span></p>
+      <p class="text-xs text-gray-400 mt-1">共 <span id="ovBuyNum">0</span> 笔</p>
+    </div>
+    <div class="card p-4 border-l-4 border-green-500">
+      <p class="text-xs text-gray-500">总收入</p>
+      <p class="text-2xl font-bold text-green-600"><span id="ovSell">0</span><span class="text-sm font-normal"> 元</span></p>
+      <p class="text-xs text-gray-400 mt-1">共 <span id="ovSellNum">0</span> 份</p>
+    </div>
+    <div class="card p-4 border-l-4 border-blue-500">
+      <p class="text-xs text-gray-500">总利润</p>
+      <p class="text-2xl font-bold text-blue-600"><span id="ovProfit">0</span><span class="text-sm font-normal"> 元</span></p>
+      <p class="text-xs text-gray-400 mt-1">总收入 − 总支出</p>
+    </div>
+    <div class="card p-4 border-l-4 border-purple-400">
+      <p class="text-xs text-gray-500">固定支出</p>
+      <p class="text-2xl font-bold text-purple-500"><span id="ovOther">0</span><span class="text-sm font-normal"> 元</span></p>
+      <p class="text-xs text-gray-400 mt-1">共 <span id="ovOtherNum">0</span> 笔</p>
+    </div>
+  </div>
+
+  <!-- Tab 导航 -->
+  <div class="card p-2 flex gap-1 mb-5 overflow-x-auto">
+    <button class="tab active flex-1 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium" data-tab="buy">🛒 支出</button>
+    <button class="tab flex-1 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium text-gray-600" data-tab="sell">💵 收入</button>
+    <button class="tab flex-1 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium text-gray-600" data-tab="other">📦 固定支出</button>
+    <button class="tab flex-1 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium text-gray-600" data-tab="review">📊 每周复盘</button>
+    <button class="tab flex-1 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium text-gray-600" data-tab="summary">📋 总汇</button>
+  </div>
+
+  <!-- ========== 支出 ========== -->
+  <section id="panel-buy" class="panel">
+    <div class="grid md:grid-cols-3 gap-4">
+      <!-- 添加 + 今日列表 -->
+      <div class="md:col-span-2 card p-4 fade">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-gray-800">🛒 支出明细</h2>
+          <span class="text-xs text-gray-400">共 <b class="text-red-500" id="buyCount">0</b> 笔</span>
+        </div>
+        <!-- 快速添加 -->
+        <div class="bg-gray-50 rounded-xl p-3 mb-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div class="col-span-2 md:col-span-1 flex gap-1">
+            <select id="buyCatInput" class="flex-1 min-w-0 rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white"></select>
+            <button id="mgBuyCatBtn" title="管理种类（添加/修改/删除）" class="rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 px-2 text-sm">⚙️</button>
+          </div>
+          <input id="buyQtyInput" type="number" value="1" min="0.1" step="0.1" placeholder="数量" class="rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <div class="flex gap-1">
+            <select id="buyUnitInput" class="flex-1 min-w-0 rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white"></select>
+            <button id="mgBuyUnitBtn" title="管理单位（添加/修改/删除）" class="rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 px-2 text-sm">⚙️</button>
+          </div>
+          <input id="buyPriceInput" type="number" min="0" step="0.1" placeholder="单价(元)" class="rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <input id="buyNoteInput" type="text" placeholder="备注（选填）：如 早市买的、老板抹零" class="col-span-2 md:col-span-4 rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <div class="col-span-2 md:col-span-4 flex flex-wrap items-center justify-between gap-2">
+            <label class="flex items-center gap-1 text-xs text-gray-500">日期
+              <input id="buyDateInput" type="date" class="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white">
+            </label>
+            <span class="text-xs text-gray-500">金额自动合计：<b class="text-red-500 text-sm" id="buyAutoSum">¥0.00</b></span>
+          </div>
+          <button id="addBuyBtn" class="col-span-2 md:col-span-4 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-medium py-2">＋ 添加</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs border-b">
+              <th class="text-left py-2">种类</th><th class="text-left py-2">数量</th><th class="text-left py-2">单价</th><th class="text-left py-2">金额</th><th class="text-right py-2">操作</th>
+            </tr></thead>
+            <tbody id="buyTableBody"></tbody>
+          </table>
+          <p id="buyEmpty" class="text-center text-gray-400 text-sm py-8">今日暂无支出记录，去添加一笔吧 🧄</p>
+        </div>
+        <!-- 摘要 - 总记录 - 浏览全部记录 -->
+        <div class="mt-3 rounded-xl bg-red-50 border border-red-100 p-3 flex flex-wrap items-center justify-between gap-2">
+          <p class="text-sm text-gray-700">📋 <b>摘要</b> · 总记录 <b class="text-red-500" id="buyTotalCount">0</b> 笔 · 总支出 <b class="text-red-500" id="buyTotalSum">0</b> 元</p>
+          <button id="showAllBuyBtn" class="text-xs px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white">📄 浏览全部记录</button>
+        </div>
+      </div>
+      <!-- 种类 + 单位管理 -->
+      <div class="card p-4 fade">
+        <h2 class="font-bold text-gray-800 mb-3">🥬 买菜种类管理</h2>
+        <div class="flex gap-2 mb-3">
+          <input id="newBuyCat" type="text" placeholder="新增种类，如：大米" class="flex-1 rounded-lg px-3 py-2 text-sm border border-gray-200 bg-white">
+          <button id="addBuyCatBtn" class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-3 text-sm">添加</button>
+        </div>
+        <div id="buyCatList" class="flex flex-wrap gap-2 max-h-44 overflow-y-auto"></div>
+        <h3 class="font-bold text-gray-800 text-sm mb-2 mt-4">⚖️ 单位管理</h3>
+        <div class="flex gap-2 mb-3">
+          <input id="newBuyUnit" type="text" placeholder="新增单位，如：斤" class="flex-1 rounded-lg px-3 py-2 text-sm border border-gray-200 bg-white">
+          <button id="addBuyUnitBtn" class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-3 text-sm">添加</button>
+        </div>
+        <div id="buyUnitList" class="flex flex-wrap gap-2"></div>
+      </div>
+    </div>
+    <!-- 每日总结 -->
+    <div id="buyDailySummary" class="card p-4 mt-4 fade"></div>
+    <!-- 导入导出 -->
+    <div class="card p-3 mt-4 flex flex-wrap items-center gap-2 fade">
+      <span class="text-xs text-gray-500 mr-auto">💾 支出数据备份</span>
+      <button id="expBuyBtn" class="text-xs px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-900 text-white">⬇ 导出</button>
+      <button id="impBuyBtn" class="text-xs px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700">⬆ 导入</button>
+      <input type="file" id="impBuyFile" accept=".xlsx,.xls" class="hidden">
+    </div>
+  </section>
+
+  <!-- ========== 收入 ========== -->
+  <section id="panel-sell" class="panel hidden">
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2 card p-4 fade">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-gray-800">💵 收入明细</h2>
+          <span class="text-xs text-gray-400">合计 <b class="text-green-600" id="sellTotal">0</b> 元 · <b id="sellCount">0</b> 份</span>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-3 mb-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div class="col-span-2 md:col-span-1 flex gap-1">
+            <select id="sellCatInput" class="flex-1 min-w-0 rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white"></select>
+            <button id="mgSellCatBtn" title="管理菜品（添加/修改/删除）" class="rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 px-2 text-sm">⚙️</button>
+          </div>
+          <input id="sellQtyInput" type="number" value="1" min="1" step="1" placeholder="份数" class="rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <input id="sellPriceInput" type="number" min="0" step="0.1" placeholder="单价(元)" class="rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <input id="sellNoteInput" type="text" placeholder="备注（选填）：如 外卖平台、老顾客" class="col-span-2 md:col-span-4 rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <div class="col-span-2 md:col-span-4 flex flex-wrap items-center justify-between gap-2">
+            <label class="flex items-center gap-1 text-xs text-gray-500">日期
+              <input id="sellDateInput" type="date" class="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white">
+            </label>
+            <span class="text-xs text-gray-500">金额自动合计：<b class="text-green-600 text-sm" id="sellAutoSum">¥0.00</b></span>
+          </div>
+          <button id="addSellBtn" class="col-span-2 md:col-span-4 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-2">＋ 添加</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs border-b">
+              <th class="text-left py-2">菜品</th><th class="text-left py-2">份数</th><th class="text-left py-2">单价</th><th class="text-left py-2">金额</th><th class="text-right py-2">操作</th>
+            </tr></thead>
+            <tbody id="sellTableBody"></tbody>
+          </table>
+          <p id="sellEmpty" class="text-center text-gray-400 text-sm py-8">今日暂无收入记录 🍚</p>
+        </div>
+        <!-- 摘要 - 总记录 - 浏览全部记录 -->
+        <div class="mt-3 rounded-xl bg-green-50 border border-green-100 p-3 flex flex-wrap items-center justify-between gap-2">
+          <p class="text-sm text-gray-700">📋 <b>摘要</b> · 总记录 <b class="text-green-600" id="sellTotalCount">0</b> 笔 · 总卖出 <b class="text-green-600" id="sellTotalQty">0</b> 份 · 总收入 <b class="text-green-600" id="sellTotalSum">0</b> 元</p>
+          <button id="showAllSellBtn" class="text-xs px-3 py-1.5 rounded-lg bg-green-500 hover:bg-green-600 text-white">📄 浏览全部记录</button>
+        </div>
+      </div>
+      <div class="card p-4 fade">
+        <h2 class="font-bold text-gray-800 mb-3">🍛 菜品种类管理</h2>
+        <div class="flex gap-2 mb-3">
+          <input id="newSellCat" type="text" placeholder="新增菜品，如：麻婆豆腐盖浇饭" class="flex-1 rounded-lg px-3 py-2 text-sm border border-gray-200 bg-white">
+          <button id="addSellCatBtn" class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-3 text-sm">添加</button>
+        </div>
+        <div id="sellCatList" class="flex flex-wrap gap-2 max-h-72 overflow-y-auto"></div>
+      </div>
+    </div>
+    <!-- 每日总结 -->
+    <div id="sellDailySummary" class="card p-4 mt-4 fade"></div>
+    <!-- 导入导出 -->
+    <div class="card p-3 mt-4 flex flex-wrap items-center gap-2 fade">
+      <span class="text-xs text-gray-500 mr-auto">💾 收入数据备份</span>
+      <button id="expSellBtn" class="text-xs px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-900 text-white">⬇ 导出</button>
+      <button id="impSellBtn" class="text-xs px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700">⬆ 导入</button>
+      <input type="file" id="impSellFile" accept=".xlsx,.xls" class="hidden">
+    </div>
+  </section>
+
+  <!-- ========== 固定支出 ========== -->
+  <section id="panel-other" class="panel hidden">
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2 card p-4 fade">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-gray-800">📦 固定支出明细</h2>
+          <span class="text-xs text-gray-400">共 <b class="text-purple-500" id="otherCount">0</b> 笔</span>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-3 mb-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div class="col-span-2 md:col-span-1 flex gap-1">
+            <select id="otherCatInput" class="flex-1 min-w-0 rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white"></select>
+            <button id="mgOtherCatBtn" title="管理种类（添加/修改/删除）" class="rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 px-2 text-sm">⚙️</button>
+          </div>
+          <input id="otherQtyInput" type="number" value="1" min="0.1" step="0.1" placeholder="数量" class="rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <div class="flex gap-1">
+            <select id="otherUnitInput" class="flex-1 min-w-0 rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white"></select>
+            <button id="mgOtherUnitBtn" title="管理单位（添加/修改/删除）" class="rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 px-2 text-sm">⚙️</button>
+          </div>
+          <input id="otherPriceInput" type="number" min="0" step="0.1" placeholder="单价(元)" class="rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <input id="otherNoteInput" type="text" placeholder="备注（选填）：如 10月房租、换煤气" class="col-span-2 md:col-span-4 rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white">
+          <div class="col-span-2 md:col-span-4 flex flex-wrap items-center justify-between gap-2">
+            <label class="flex items-center gap-1 text-xs text-gray-500">日期
+              <input id="otherDateInput" type="date" class="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white">
+            </label>
+            <span class="text-xs text-gray-500">金额自动合计：<b class="text-purple-500 text-sm" id="otherAutoSum">¥0.00</b></span>
+          </div>
+          <button id="addOtherBtn" class="col-span-2 md:col-span-4 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium py-2">＋ 添加</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs border-b">
+              <th class="text-left py-2">种类</th><th class="text-left py-2">数量</th><th class="text-left py-2">单价</th><th class="text-left py-2">金额</th><th class="text-right py-2">操作</th>
+            </tr></thead>
+            <tbody id="otherTableBody"></tbody>
+          </table>
+          <p id="otherEmpty" class="text-center text-gray-400 text-sm py-8">今日暂无固定支出记录 📦</p>
+        </div>
+        <div class="mt-3 rounded-xl bg-purple-50 border border-purple-100 p-3 flex flex-wrap items-center justify-between gap-2">
+          <p class="text-sm text-gray-700">📋 <b>摘要</b> · 总记录 <b class="text-purple-500" id="otherTotalCount">0</b> 笔 · 总支出 <b class="text-purple-500" id="otherTotalSum">0</b> 元</p>
+          <button id="showAllOtherBtn" class="text-xs px-3 py-1.5 rounded-lg bg-purple-500 hover:bg-purple-600 text-white">📄 浏览全部记录</button>
+        </div>
+      </div>
+      <div class="card p-4 fade">
+        <h2 class="font-bold text-gray-800 mb-3">🏷️ 支出种类管理</h2>
+        <div class="flex gap-2 mb-3">
+          <input id="newOtherCat" type="text" placeholder="新增种类，如：房租" class="flex-1 rounded-lg px-3 py-2 text-sm border border-gray-200 bg-white">
+          <button id="addOtherCatBtn" class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-3 text-sm">添加</button>
+        </div>
+        <div id="otherCatList" class="flex flex-wrap gap-2 max-h-44 overflow-y-auto"></div>
+        <h3 class="font-bold text-gray-800 text-sm mb-2 mt-4">⚖️ 单位管理</h3>
+        <div class="flex gap-2 mb-3">
+          <input id="newOtherUnit" type="text" placeholder="新增单位，如：月" class="flex-1 rounded-lg px-3 py-2 text-sm border border-gray-200 bg-white">
+          <button id="addOtherUnitBtn" class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-3 text-sm">添加</button>
+        </div>
+        <div id="otherUnitList" class="flex flex-wrap gap-2"></div>
+      </div>
+    </div>
+    <!-- 每日总结 -->
+    <div id="otherDailySummary" class="card p-4 mt-4 fade"></div>
+    <!-- 导入导出 -->
+    <div class="card p-3 mt-4 flex flex-wrap items-center gap-2 fade">
+      <span class="text-xs text-gray-500 mr-auto">💾 固定支出数据备份</span>
+      <button id="expOtherBtn" class="text-xs px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-900 text-white">⬇ 导出</button>
+      <button id="impOtherBtn" class="text-xs px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700">⬆ 导入</button>
+      <input type="file" id="impOtherFile" accept=".xlsx,.xls" class="hidden">
+    </div>
+  </section>
+
+  <!-- ========== 每周复盘 ========== -->
+  <section id="panel-review" class="panel hidden">
+    <div id="reviewContent"></div>
+  </section>
+
+  <!-- ========== 总汇 ========== -->
+  <section id="panel-summary" class="panel hidden">
+    <div id="summaryContent"></div>
+  </section>
+
+  <!-- 弹窗 -->
+  <div id="modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+    <div class="card w-full max-w-lg p-5 fade">
+      <h3 id="modalTitle" class="font-bold text-gray-800 mb-4">编辑</h3>
+      <div id="modalBody" class="space-y-3"></div>
+      <div class="flex gap-2 mt-5">
+        <button id="modalCancel" class="flex-1 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 text-sm">关闭</button>
+        <button id="modalSave" class="flex-1 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white py-2 text-sm hidden">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- 工具函数 ---------------- */
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const fmtDate = d => { const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}` };
+const todayStr = fmtDate(new Date());
+const monday = (()=>{ const d=new Date(); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return fmtDate(d); })();
+const isThisWeek = date => date >= monday && date <= todayStr;
+
+/* ---------------- 初始数据（空账本） ---------------- */
+function emptyData(){
+  return {
+    buyCats:['大米','瘦肉','五花肉','排骨','鸡蛋','莲花白','青椒','土豆','西红柿','葱姜蒜','食用油'],
+    buyUnits:['斤','公斤','两','袋','瓶','箱','个'],
+    sellCats:['回锅肉盖浇饭','香肠炒饭','青椒肉丝盖浇饭','鱼香肉丝盖浇饭','宫保鸡丁盖浇饭','番茄炒蛋盖浇饭','卤肉饭'],
+    otherCats:['房租','水电费','燃气费','煤气','包装袋','卫生费','其他'],
+    otherUnits:['月','次','个','袋','度','瓶'],
+    buyItems:[], sellItems:[], otherItems:[]
+  };
+}
+
+/* ---------------- 状态 ---------------- */
+let state = JSON.parse(localStorage.getItem('sanjinLedger')||'null');
+if(!state){ state=emptyData(); save(); }
+if(!state.buyUnits){ state.buyUnits=['斤','公斤','两','袋','瓶','箱','个']; }
+if(!state.otherCats){ state.otherCats=['房租','水电费','燃气费','煤气','包装袋','卫生费','其他']; }
+if(!state.otherUnits){ state.otherUnits=['月','次','个','袋','度','瓶']; }
+if(!state.otherItems){ state.otherItems=[]; }
+function save(){ localStorage.setItem('sanjinLedger', JSON.stringify(state)); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+/* ---------------- 图表 ---------------- */
+let trendChart=null, pieChart=null, topChart=null, sumTrendChart=null, sumPieChart=null;
+function destroyChart(c){ if(c){c.destroy();} }
+function money(n){ return Math.round(n*100)/100; }
+
+/* ---------------- 渲染 ---------------- */
+function renderTodayStr(){ $('#todayStr').textContent = new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'}); }
+
+function renderOverview(){
+  const buySum=state.buyItems.reduce((a,b)=>a+b.amount,0);
+  const otherSum=state.otherItems.reduce((a,b)=>a+b.amount,0);
+  const sellSum=state.sellItems.reduce((a,b)=>a+b.amount,0);
+  const qty=state.sellItems.reduce((a,b)=>a+b.qty,0);
+  const profit=sellSum-buySum;
+  $('#ovBuy').textContent=money(buySum);
+  $('#ovBuyNum').textContent=state.buyItems.length;
+  $('#ovSell').textContent=money(sellSum);
+  $('#ovSellNum').textContent=qty;
+  $('#ovProfit').textContent=money(profit);
+  $('#ovOther').textContent=money(otherSum);
+  $('#ovOtherNum').textContent=state.otherItems.length;
+}
+
+/* ---------------- 每日总结 ---------------- */
+function renderDailySummary(){
+  const b=state.buyItems.filter(i=>i.date===todayStr);
+  const s=state.sellItems.filter(i=>i.date===todayStr);
+  const bSum=b.reduce((a,x)=>a+x.amount,0);
+  const sSum=s.reduce((a,x)=>a+x.amount,0);
+  const qty=s.reduce((a,x)=>a+x.qty,0);
+  const profit=sSum-bSum;
+  let text;
+  if(sSum===0&&bSum===0){
+    text='今天还没有任何记录，去记一笔吧 🧾';
+  }else{
+    const parts=[];
+    if(b.length) parts.push(`支出 ${b.length} 笔、合计 ¥${money(bSum)}`);
+    if(s.length) parts.push(`收入 ${qty} 份、合计 ¥${money(sSum)}${qty>0?`（客单价 ¥${money(sSum/qty)}）`:''}`);
+    const profitText = profit>0?`盈利 ¥${money(profit)} 🎉`:(profit===0?'收支持平 💪':`亏损 ¥${money(-profit)} 💪`);
+    text=`今日${parts.join('，')}，${profitText}。`;
+  }
+  const html=`
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-bold text-gray-800">📝 每日总结</h2>
+      <span class="text-xs text-gray-400">${todayStr}（今日）</span>
+    </div>
+    <p class="text-sm leading-7 text-gray-700 bg-gray-50 rounded-xl p-3">${text}</p>`;
+  $('#buyDailySummary').innerHTML=html;
+  $('#sellDailySummary').innerHTML=html;
+  $('#otherDailySummary').innerHTML=html;
+}
+
+function renderBuyCats(){
+  const sel=$('#buyCatInput'); sel.innerHTML='';
+  state.buyCats.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+  const list=$('#buyCatList'); list.innerHTML='';
+  state.buyCats.forEach(c=>{
+    const el=document.createElement('span');
+    el.className='badge bg-emerald-50 text-emerald-700 border border-emerald-200';
+    el.innerHTML=`${c}<button class="opacity-40 hover:opacity-100 hover:text-blue-500" data-act="editBuyCat" data-cat="${c}" title="修改">✏️</button><button class="opacity-40 hover:opacity-100 hover:text-red-500" data-act="delBuyCat" data-cat="${c}" title="删除">×</button>`;
+    list.appendChild(el);
+  });
+}
+
+function renderBuyUnits(){
+  const sel=$('#buyUnitInput'); sel.innerHTML='';
+  state.buyUnits.forEach(u=>{ const o=document.createElement('option'); o.value=u; o.textContent=u; sel.appendChild(o); });
+  const list=$('#buyUnitList'); list.innerHTML='';
+  state.buyUnits.forEach(u=>{
+    const el=document.createElement('span');
+    el.className='badge bg-sky-50 text-sky-700 border border-sky-200';
+    el.innerHTML=`${u}<button class="opacity-40 hover:opacity-100 hover:text-blue-500" data-act="editBuyUnit" data-unit="${u}" title="修改">✏️</button><button class="opacity-40 hover:opacity-100 hover:text-red-500" data-act="delBuyUnit" data-unit="${u}" title="删除">×</button>`;
+    list.appendChild(el);
+  });
+}
+
+function renderSellCats(){
+  const sel=$('#sellCatInput'); sel.innerHTML='';
+  state.sellCats.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+  const list=$('#sellCatList'); list.innerHTML='';
+  state.sellCats.forEach(c=>{
+    const el=document.createElement('span');
+    el.className='badge bg-orange-50 text-orange-700 border border-orange-200';
+    el.innerHTML=`${c}<button class="opacity-40 hover:opacity-100 hover:text-blue-500" data-act="editSellCat" data-cat="${c}" title="修改">✏️</button><button class="opacity-40 hover:opacity-100 hover:text-red-500" data-act="delSellCat" data-cat="${c}" title="删除">×</button>`;
+    list.appendChild(el);
+  });
+}
+
+function renderOtherCats(){
+  const sel=$('#otherCatInput'); sel.innerHTML='';
+  state.otherCats.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+  const list=$('#otherCatList'); list.innerHTML='';
+  state.otherCats.forEach(c=>{
+    const el=document.createElement('span');
+    el.className='badge bg-purple-50 text-purple-700 border border-purple-200';
+    el.innerHTML=`${c}<button class="opacity-40 hover:opacity-100 hover:text-blue-500" data-act="editOtherCat" data-cat="${c}" title="修改">✏️</button><button class="opacity-40 hover:opacity-100 hover:text-red-500" data-act="delOtherCat" data-cat="${c}" title="删除">×</button>`;
+    list.appendChild(el);
+  });
+}
+
+function renderOtherUnits(){
+  const sel=$('#otherUnitInput'); sel.innerHTML='';
+  state.otherUnits.forEach(u=>{ const o=document.createElement('option'); o.value=u; o.textContent=u; sel.appendChild(o); });
+  const list=$('#otherUnitList'); list.innerHTML='';
+  state.otherUnits.forEach(u=>{
+    const el=document.createElement('span');
+    el.className='badge bg-sky-50 text-sky-700 border border-sky-200';
+    el.innerHTML=`${u}<button class="opacity-40 hover:opacity-100 hover:text-blue-500" data-act="editOtherUnit" data-unit="${u}" title="修改">✏️</button><button class="opacity-40 hover:opacity-100 hover:text-red-500" data-act="delOtherUnit" data-unit="${u}" title="删除">×</button>`;
+    list.appendChild(el);
+  });
+}
+
+function renderOtherTable(){
+  const rows=state.otherItems.filter(i=>i.date===todayStr);
+  const tb=$('#otherTableBody'); tb.innerHTML=''; $('#otherEmpty').style.display=rows.length?'none':'block';
+  $('#otherCount').textContent=rows.length;
+  rows.forEach(i=>{
+    const tr=document.createElement('tr'); tr.className='border-b border-gray-50';
+    tr.innerHTML=`
+      <td class="py-2"><span class="badge bg-purple-50 text-purple-600">${i.cat}</span>${i.note?`<p class="text-xs text-gray-400 mt-0.5">📝 ${i.note}</p>`:''}</td>
+      <td class="py-2 text-gray-600">${i.qty} ${i.unit||'次'}</td>
+      <td class="py-2 text-gray-600">¥${i.price}</td>
+      <td class="py-2 font-semibold text-purple-500">¥${money(i.amount)}</td>
+      <td class="py-2 text-right">
+        <button class="text-xs text-gray-400 hover:text-blue-500 mr-1" data-act="editOther" data-id="${i.id}">编辑</button>
+        <button class="text-xs text-gray-400 hover:text-red-500" data-act="delOther" data-id="${i.id}">删除</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function renderBuyTable(){
+  const rows=state.buyItems.filter(i=>i.date===todayStr);
+  const tb=$('#buyTableBody'); tb.innerHTML=''; $('#buyEmpty').style.display=rows.length?'none':'block';
+  $('#buyCount').textContent=rows.length;
+  rows.forEach(i=>{
+    const tr=document.createElement('tr'); tr.className='border-b border-gray-50';
+    tr.innerHTML=`
+      <td class="py-2"><span class="badge bg-red-50 text-red-600">${i.cat}</span>${i.note?`<p class="text-xs text-gray-400 mt-0.5">📝 ${i.note}</p>`:''}</td>
+      <td class="py-2 text-gray-600">${i.qty} ${i.unit||'斤'}</td>
+      <td class="py-2 text-gray-600">¥${i.price}</td>
+      <td class="py-2 font-semibold text-red-500">¥${money(i.amount)}</td>
+      <td class="py-2 text-right">
+        <button class="text-xs text-gray-400 hover:text-blue-500 mr-1" data-act="editBuy" data-id="${i.id}">编辑</button>
+        <button class="text-xs text-gray-400 hover:text-red-500" data-act="delBuy" data-id="${i.id}">删除</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function renderSellTable(){
+  const rows=state.sellItems.filter(i=>i.date===todayStr);
+  const tb=$('#sellTableBody'); tb.innerHTML=''; $('#sellEmpty').style.display=rows.length?'none':'block';
+  $('#sellCount').textContent=rows.reduce((a,b)=>a+b.qty,0);
+  $('#sellTotal').textContent=money(rows.reduce((a,b)=>a+b.amount,0));
+  rows.forEach(i=>{
+    const tr=document.createElement('tr'); tr.className='border-b border-gray-50';
+    tr.innerHTML=`
+      <td class="py-2"><span class="badge bg-green-50 text-green-600">${i.cat}</span>${i.note?`<p class="text-xs text-gray-400 mt-0.5">📝 ${i.note}</p>`:''}</td>
+      <td class="py-2 text-gray-600">${i.qty} 份</td>
+      <td class="py-2 text-gray-600">¥${i.price}</td>
+      <td class="py-2 font-semibold text-green-600">¥${money(i.amount)}</td>
+      <td class="py-2 text-right">
+        <button class="text-xs text-gray-400 hover:text-blue-500 mr-1" data-act="editSell" data-id="${i.id}">编辑</button>
+        <button class="text-xs text-gray-400 hover:text-red-500" data-act="delSell" data-id="${i.id}">删除</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function renderSummaryBars(){
+  $('#buyTotalCount').textContent=state.buyItems.length;
+  $('#buyTotalSum').textContent=money(state.buyItems.reduce((a,b)=>a+b.amount,0));
+  $('#sellTotalCount').textContent=state.sellItems.length;
+  $('#sellTotalQty').textContent=state.sellItems.reduce((a,b)=>a+b.qty,0);
+  $('#sellTotalSum').textContent=money(state.sellItems.reduce((a,b)=>a+b.amount,0));
+  $('#otherTotalCount').textContent=state.otherItems.length;
+  $('#otherTotalSum').textContent=money(state.otherItems.reduce((a,b)=>a+b.amount,0));
+}
+
+function renderReview(){
+  const wBuy=state.buyItems.filter(i=>isThisWeek(i.date));
+  const wSell=state.sellItems.filter(i=>isThisWeek(i.date));
+  const buySum=wBuy.reduce((a,b)=>a+b.amount,0);
+  const sellSum=wSell.reduce((a,b)=>a+b.amount,0);
+  const profit=sellSum-buySum;
+  const qty=wSell.reduce((a,b)=>a+b.qty,0);
+  const days=Math.max(1,new Set(wSell.map(i=>i.date)).size);
+
+  const c=$('#reviewContent');
+  c.innerHTML=`
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 fade">
+      <div class="card p-4"><p class="text-xs text-gray-500">本周支出</p><p class="text-xl font-bold text-orange-500 mt-1">¥${money(buySum)}</p></div>
+      <div class="card p-4"><p class="text-xs text-gray-500">本周收入</p><p class="text-xl font-bold text-green-600 mt-1">¥${money(sellSum)}</p></div>
+      <div class="card p-4"><p class="text-xs text-gray-500">本周利润</p><p class="text-xl font-bold text-blue-600 mt-1">¥${money(profit)}</p></div>
+      <div class="card p-4"><p class="text-xs text-gray-500">日均收入</p><p class="text-xl font-bold text-amber-500 mt-1">¥${money(sellSum/days)}</p><p class="text-xs text-gray-400">共 ${qty} 份 / ${days} 天</p></div>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="card p-4 fade"><h3 class="font-bold text-gray-800 text-sm mb-2">📈 近 7 天收支趋势</h3><canvas id="trendChart" height="220"></canvas></div>
+      <div class="card p-4 fade"><h3 class="font-bold text-gray-800 text-sm mb-2">🥬 本周支出分布</h3><canvas id="pieChart" height="220"></canvas></div>
+    </div>
+    <div class="card p-4 mt-4 fade">
+      <h3 class="font-bold text-gray-800 text-sm mb-3">🏆 本周热销菜品 Top 5</h3>
+      <canvas id="topChart" height="220"></canvas>
+    </div>`;
+
+  const labels=[]; const buyA=[], sellA=[];
+  for(let i=6;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); const ds=fmtDate(d);
+    labels.push(ds.slice(5)); buyA.push(money(state.buyItems.filter(x=>x.date===ds).reduce((a,b)=>a+b.amount,0))); sellA.push(money(state.sellItems.filter(x=>x.date===ds).reduce((a,b)=>a+b.amount,0))); }
+  destroyChart(trendChart);
+  trendChart=new Chart($('#trendChart'),{type:'line',data:{labels,datasets:[
+    {label:'支出',data:buyA,borderColor:'#f97316',backgroundColor:'rgba(249,115,22,.1)',fill:true,tension:.35},
+    {label:'收入',data:sellA,borderColor:'#16a34a',backgroundColor:'rgba(22,163,74,.1)',fill:true,tension:.35}
+  ]},options:{plugins:{legend:{position:'top',labels:{usePointStyle:true,boxWidth:6}}},scales:{y:{grid:{color:'#f1f5f9'}}},responsive:true,maintainAspectRatio:false}});
+
+  const catMap={}; wBuy.forEach(i=>catMap[i.cat]=(catMap[i.cat]||0)+i.amount);
+  const colors=['#f97316','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
+  destroyChart(pieChart);
+  pieChart=new Chart($('#pieChart'),{type:'doughnut',data:{labels:Object.keys(catMap),datasets:[{data:Object.values(catMap).map(money),backgroundColor:colors, borderWidth:2,borderColor:'#fff'}]},options:{plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:6}}},responsive:true,maintainAspectRatio:false}});
+
+  const qMap={}; wSell.forEach(i=>qMap[i.cat]=(qMap[i.cat]||0)+i.qty);
+  const top=Object.entries(qMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  destroyChart(topChart);
+  topChart=new Chart($('#topChart'),{type:'bar',data:{labels:top.map(t=>t[0]),datasets:[{label:'售出份数',data:top.map(t=>t[1]),backgroundColor:'#f59e0b',borderRadius:8}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#f1f5f9'}}},responsive:true,maintainAspectRatio:false}});
+}
+
+/* ---------------- 总汇 ---------------- */
+function renderSummary(){
+  const allBuy=state.buyItems, allSell=state.sellItems;
+  const buySum=allBuy.reduce((a,b)=>a+b.amount,0);
+  const sellSum=allSell.reduce((a,b)=>a+b.amount,0);
+  const profit=sellSum-buySum;
+  const c=$('#summaryContent');
+  const otherOnly=state.otherItems.reduce((a,b)=>a+b.amount,0);
+  c.innerHTML=`
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 fade">
+      <div class="card p-4"><p class="text-xs text-gray-500">买菜支出</p><p class="text-xl font-bold text-red-500 mt-1">¥${money(buySum)}</p><p class="text-xs text-gray-400">共 ${allBuy.length} 笔</p></div>
+      <div class="card p-4"><p class="text-xs text-gray-500">总收入</p><p class="text-xl font-bold text-green-600 mt-1">¥${money(sellSum)}</p><p class="text-xs text-gray-400">共 ${allSell.length} 笔 · ${allSell.reduce((a,b)=>a+b.qty,0)} 份</p></div>
+      <div class="card p-4 border-2 border-blue-200"><p class="text-xs text-gray-500">经营结余</p><p class="text-xl font-bold text-blue-600 mt-1">¥${money(profit)}</p><p class="text-xs text-gray-400">总收入 − 买菜支出</p></div>
+      <div class="card p-4 border-l-4 border-purple-400"><p class="text-xs text-gray-500">固定支出</p><p class="text-xl font-bold text-purple-500 mt-1">¥${money(otherOnly)}</p><p class="text-xs text-gray-400">独立统计 · 共 ${state.otherItems.length} 笔</p></div>
+    </div>
+    <div class="card p-4 mb-4 fade bg-blue-50 border border-blue-100">
+      <p class="text-sm text-gray-700 leading-7">💰 <b>总和计算</b>：所有收入 <b class="text-green-600">¥${money(sellSum)}</b> − 买菜支出 <b class="text-red-500">¥${money(buySum)}</b> = 经营结余 <b class="text-blue-600">¥${money(profit)}</b>。<b class="text-purple-500">固定支出 ¥${money(otherOnly)}</b> 为独立个体，未计入经营结余。</p>
+    </div>
+    <div class="card p-4 mb-4 fade">
+      <h3 class="font-bold text-gray-800 text-sm mb-3">📅 按日汇总（全部记录）</h3>
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="text-gray-400 text-xs border-b"><th class="text-left py-2">日期</th><th class="text-right py-2">支出</th><th class="text-right py-2">收入</th><th class="text-right py-2">利润</th></tr></thead>
+        <tbody id="sumDayBody"></tbody></table></div>
+      <p id="sumDayEmpty" class="text-center text-gray-400 text-sm py-6">暂无记录，先去记一笔吧 🧾</p>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="card p-4 fade"><h3 class="font-bold text-gray-800 text-sm mb-2">📈 近 30 天收支趋势</h3><canvas id="sumTrendChart" height="220"></canvas></div>
+      <div class="card p-4 fade"><h3 class="font-bold text-gray-800 text-sm mb-2">🥬 全部支出分布</h3><canvas id="sumPieChart" height="220"></canvas></div>
+    </div>`;
+
+  const dayMap={};
+  allBuy.forEach(i=>{dayMap[i.date]=dayMap[i.date]||{b:0,s:0};dayMap[i.date].b+=i.amount;});
+  allSell.forEach(i=>{dayMap[i.date]=dayMap[i.date]||{b:0,s:0};dayMap[i.date].s+=i.amount;});
+  const days=Object.keys(dayMap).sort((a,b)=>b.localeCompare(a));
+  const tb=$('#sumDayBody');
+  $('#sumDayEmpty').style.display=days.length?'none':'block';
+  days.forEach(d=>{
+    const p=dayMap[d].s-dayMap[d].b;
+    const tr=document.createElement('tr'); tr.className='border-b border-gray-50';
+    tr.innerHTML=`<td class="py-2 text-gray-700">${d}</td><td class="py-2 text-right text-red-500">¥${money(dayMap[d].b)}</td><td class="py-2 text-right text-green-600">¥${money(dayMap[d].s)}</td><td class="py-2 text-right font-semibold ${p>=0?'text-blue-600':'text-orange-500'}">¥${money(p)}</td>`;
+    tb.appendChild(tr);
+  });
+
+  const labels=[],bA=[],sA=[];
+  for(let i=29;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const ds=fmtDate(d);labels.push(ds.slice(5));bA.push(money([...state.buyItems,...state.otherItems].filter(x=>x.date===ds).reduce((a,b)=>a+b.amount,0)));sA.push(money(state.sellItems.filter(x=>x.date===ds).reduce((a,b)=>a+b.amount,0)));}
+  destroyChart(sumTrendChart);
+  sumTrendChart=new Chart($('#sumTrendChart'),{type:'line',data:{labels,datasets:[
+    {label:'支出',data:bA,borderColor:'#f97316',backgroundColor:'rgba(249,115,22,.1)',fill:true,tension:.35},
+    {label:'收入',data:sA,borderColor:'#16a34a',backgroundColor:'rgba(22,163,74,.1)',fill:true,tension:.35}
+  ]},options:{plugins:{legend:{position:'top',labels:{usePointStyle:true,boxWidth:6}}},scales:{y:{grid:{color:'#f1f5f9'}}},responsive:true,maintainAspectRatio:false}});
+
+  const catMap={};allBuy.forEach(i=>catMap[i.cat]=(catMap[i.cat]||0)+i.amount);
+  const colors=['#f97316','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
+  destroyChart(sumPieChart);
+  sumPieChart=new Chart($('#sumPieChart'),{type:'doughnut',data:{labels:Object.keys(catMap),datasets:[{data:Object.values(catMap).map(money),backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},options:{plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:6}}},responsive:true,maintainAspectRatio:false}});
+}
+
+/* ---------------- 弹窗 ---------------- */
+let editCtx=null, viewingAll=null, viewingManager=null;
+function openModal(html,title,withSave){
+  $('#modalTitle').textContent=title; $('#modalBody').innerHTML=html;
+  $('#modalSave').classList.toggle('hidden',!withSave);
+  $('#modal').classList.remove('hidden');
+}
+function closeModal(){ $('#modal').classList.add('hidden'); editCtx=null; viewingAll=null; viewingManager=null; }
+
+/* ---------------- 下拉选项管理弹窗 ---------------- */
+function openManager(kind){
+  const conf={
+    buyCat:{title:'🥬 种类管理（可添加 / 修改 / 删除）',list:state.buyCats,addAct:'mgrAddBuyCat',editAct:'editBuyCat',delAct:'delBuyCat',key:'cat',cls:'bg-emerald-50 text-emerald-700 border border-emerald-200',ph:'新增种类，如：大米'},
+    buyUnit:{title:'⚖️ 单位管理（可添加 / 修改 / 删除）',list:state.buyUnits,addAct:'mgrAddBuyUnit',editAct:'editBuyUnit',delAct:'delBuyUnit',key:'unit',cls:'bg-sky-50 text-sky-700 border border-sky-200',ph:'新增单位，如：斤'},
+    sellCat:{title:'🍛 菜品管理（可添加 / 修改 / 删除）',list:state.sellCats,addAct:'mgrAddSellCat',editAct:'editSellCat',delAct:'delSellCat',key:'cat',cls:'bg-orange-50 text-orange-700 border border-orange-200',ph:'新增菜品，如：麻婆豆腐盖浇饭'},
+    otherCat:{title:'🏷️ 种类管理（可添加 / 修改 / 删除）',list:state.otherCats,addAct:'mgrAddOtherCat',editAct:'editOtherCat',delAct:'delOtherCat',key:'cat',cls:'bg-purple-50 text-purple-700 border border-purple-200',ph:'新增种类，如：房租'},
+    otherUnit:{title:'⚖️ 单位管理（可添加 / 修改 / 删除）',list:state.otherUnits,addAct:'mgrAddOtherUnit',editAct:'editOtherUnit',delAct:'delOtherUnit',key:'unit',cls:'bg-sky-50 text-sky-700 border border-sky-200',ph:'新增单位，如：月'}
+  }[kind];
+  let html=`<div class="flex gap-2 mb-3">
+    <input id="mgrInput" type="text" placeholder="${conf.ph}" class="flex-1 rounded-lg px-3 py-2 text-sm border border-gray-200">
+    <button class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-3 text-sm" data-act="${conf.addAct}">添加</button>
+  </div><div class="flex flex-wrap gap-2 max-h-[45vh] overflow-y-auto">`;
+  conf.list.forEach(v=>{
+    html+=`<span class="badge ${conf.cls}">${v}<button class="opacity-40 hover:opacity-100 hover:text-blue-500" data-act="${conf.editAct}" data-${conf.key}="${v}" title="修改">✏️</button><button class="opacity-40 hover:opacity-100 hover:text-red-500" data-act="${conf.delAct}" data-${conf.key}="${v}" title="删除">×</button></span>`;
+  });
+  html+='</div>';
+  viewingManager=kind;
+  openModal(html,conf.title,false);
+}
+
+/* ---------------- 浏览全部记录 ---------------- */
+function openAllRecords(type){
+  const src = type==='buy'?state.buyItems : type==='sell'?state.sellItems : state.otherItems;
+  const items=[...src].sort((a,b)=>b.date.localeCompare(a.date));
+  const colorCls = type==='buy'?['text-red-500','bg-red-50 text-red-600','text-red-500'] : type==='sell'?['text-green-600','bg-green-50 text-green-600','text-green-600'] : ['text-purple-500','bg-purple-50 text-purple-600','text-purple-500'];
+  const editAct = type==='buy'?'editBuy' : type==='sell'?'editSell' : 'editOther';
+  const delAct = type==='buy'?'delBuy' : type==='sell'?'delSell' : 'delOther';
+  const unitTxt = i => type==='sell' ? '份' : (i.unit||'斤');
+  let html='';
+  if(!items.length){
+    html='<p class="text-center text-gray-400 text-sm py-8">暂无任何记录</p>';
+  }else{
+    const groups={};
+    items.forEach(i=>{(groups[i.date]=groups[i.date]||[]).push(i);});
+    Object.keys(groups).sort((a,b)=>b.localeCompare(a)).forEach(d=>{
+      const daySum=groups[d].reduce((a,b)=>a+b.amount,0);
+      html+=`<div class="mb-3"><div class="flex justify-between items-center mb-1"><span class="text-sm font-bold text-gray-700">📅 ${d}</span><span class="text-xs ${colorCls[0]} font-bold">小计 ¥${money(daySum)}</span></div><div class="divide-y divide-gray-50">`;
+      groups[d].forEach(i=>{
+        html+=`<div class="flex flex-wrap items-center gap-2 py-2 text-sm">
+          <span class="badge ${colorCls[1]}">${i.cat}</span>
+          <span class="text-gray-500 text-xs flex-1">${i.qty} ${unitTxt(i)} × ¥${i.price}${i.note?` · 📝${i.note}`:''}</span>
+          <span class="font-semibold ${colorCls[2]}">¥${money(i.amount)}</span>
+          <button class="text-xs text-gray-400 hover:text-blue-500" data-act="${editAct}" data-id="${i.id}">编辑</button>
+          <button class="text-xs text-gray-400 hover:text-red-500" data-act="${delAct}" data-id="${i.id}">删除</button>
+        </div>`;
+      });
+      html+='</div></div>';
+    });
+  }
+  viewingAll=type;
+  openModal(`<div class="max-h-[60vh] overflow-y-auto pr-1">${html}</div>`, type==='buy'?'📄 全部支出记录':type==='sell'?'📄 全部收入记录':'📄 全部固定支出记录', false);
+}
+
+/* ---------------- 导入导出 ---------------- */
+function exportData(type){
+  const nameMap={buy:'支出',sell:'收入',other:'固定支出'};
+  const items = type==='buy'?state.buyItems : type==='sell'?state.sellItems : state.otherItems;
+  const cats = type==='buy'?state.buyCats : type==='sell'?state.sellCats : state.otherCats;
+  const units = type==='buy'?state.buyUnits : type==='sell'?null : state.otherUnits;
+
+  const records = items.map(i=>[i.date, i.cat, i.qty, type==='sell'?'份':(i.unit||'斤'), i.price, money(i.amount), (i.note||'')]);
+  records.unshift(['日期','名称','数量','单位','单价','金额','备注']);
+
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet(records);
+  ws1['!cols'] = [{wch:12},{wch:16},{wch:8},{wch:8},{wch:8},{wch:10},{wch:24}];
+  XLSX.utils.book_append_sheet(wb, ws1, '记录');
+
+  const ws2 = XLSX.utils.aoa_to_sheet([['种类'], ...cats.map(c=>[c])]);
+  ws2['!cols'] = [{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws2, '种类');
+
+  if(units){
+    const ws3 = XLSX.utils.aoa_to_sheet([['单位'], ...units.map(u=>[u])]);
+    ws3['!cols'] = [{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws3, '单位');
+  }
+  XLSX.writeFile(wb, `三金小本买卖-${nameMap[type]}数据-${todayStr}.xlsx`);
+}
+function importData(type,file){
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const wb = XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const nameMap={buy:'支出',sell:'收入',other:'固定支出'};
+      if(!wb.Sheets['记录']) throw new Error('文件中没有“记录”工作表');
+
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets['记录'],{header:1,defval:''});
+      const dataRows = rows.slice(1).filter(r=>r[1]);
+      // 指纹去重：日期+名称+数量+单价，避免重复导入
+      const seen=new Set([...state.buyItems,...state.sellItems,...state.otherItems].map(x=>x.date+'|'+x.cat+'|'+x.qty+'|'+x.price));
+      const arr = type==='buy'?state.buyItems : type==='sell'?state.sellItems : state.otherItems;
+      let added=0;
+      dataRows.forEach(r=>{
+        const date=String(r[0]).slice(0,10)||todayStr;
+        const cat=String(r[1]).trim(), qty=Number(r[2])||1, price=Number(r[4])||0;
+        if(!cat||price<=0) return;
+        const unit = type==='sell' ? '份' : (String(r[3]).trim()||'斤');
+        const note = String(r[6]||'').trim();
+        const fp = date+'|'+cat+'|'+qty+'|'+price;
+        if(seen.has(fp)) return;
+        seen.add(fp);
+        arr.push({id:uid(),cat,date,unit,qty,price,amount:money(qty*price),note});
+        added++;
+      });
+
+      if(wb.Sheets['种类']){
+        const crows = XLSX.utils.sheet_to_json(wb.Sheets['种类'],{header:1,defval:''}).slice(1).map(r=>String(r[0]).trim()).filter(Boolean);
+        const catsArr = type==='buy'?state.buyCats : type==='sell'?state.sellCats : state.otherCats;
+        crows.forEach(c=>{if(c&&!catsArr.includes(c))catsArr.push(c);});
+      }
+      if(wb.Sheets['单位']){
+        const urows = XLSX.utils.sheet_to_json(wb.Sheets['单位'],{header:1,defval:''}).slice(1).map(r=>String(r[0]).trim()).filter(Boolean);
+        const unitsArr = type==='buy'?state.buyUnits : (type==='other'?state.otherUnits:null);
+        if(unitsArr) urows.forEach(u=>{if(u&&!unitsArr.includes(u))unitsArr.push(u);});
+      }
+      save(); renderAll();
+      alert(`导入成功：新增 ${added} 条记录 ✅`);
+    }catch(err){ alert('导入失败：'+(err.message||'文件格式错误，请选择导出的Excel文件')); }
+  };
+  r.readAsArrayBuffer(file);
+}
+
+/* ---------------- 事件绑定 ---------------- */
+function updBuyAuto(){
+  const q=parseFloat($('#buyQtyInput').value)||0, p=parseFloat($('#buyPriceInput').value)||0;
+  $('#buyAutoSum').textContent='¥'+money(q*p).toFixed(2);
+}
+function updSellAuto(){
+  const q=parseFloat($('#sellQtyInput').value)||0, p=parseFloat($('#sellPriceInput').value)||0;
+  $('#sellAutoSum').textContent='¥'+money(q*p).toFixed(2);
+}
+
+function bindEvents(){
+  // Tab 切换
+  $$('.tab').forEach(t=>t.addEventListener('click',()=>{
+    $$('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active');
+    $$('.panel').forEach(p=>p.classList.add('hidden'));
+    $('#panel-'+t.dataset.tab).classList.remove('hidden');
+    if(t.dataset.tab==='review') renderReview();
+    if(t.dataset.tab==='summary') renderSummary();
+  }));
+
+  // 自动合计
+  $('#buyQtyInput').addEventListener('input',updBuyAuto);
+  $('#buyPriceInput').addEventListener('input',updBuyAuto);
+  $('#sellQtyInput').addEventListener('input',updSellAuto);
+  $('#sellPriceInput').addEventListener('input',updSellAuto);
+
+  // 添加支出
+  $('#addBuyBtn').addEventListener('click',()=>{
+    const cat=$('#buyCatInput').value, qty=parseFloat($('#buyQtyInput').value), price=parseFloat($('#buyPriceInput').value);
+    const date=$('#buyDateInput').value||todayStr, note=$('#buyNoteInput').value.trim();
+    if(!cat||!price||price<=0){ alert('请填写种类和有效的单价'); return; }
+    state.buyItems.push({id:uid(),cat,date,unit:$('#buyUnitInput').value||'斤',qty:qty||1,price,amount:money((qty||1)*price),note});
+    save(); renderAll(); $('#buyNoteInput').value='';
+    if(date!==todayStr) alert(`已记录到 ${date}（非今日），今日表格不显示，可在「浏览全部记录」中查看`);
+  });
+
+  // 添加收入
+  $('#addSellBtn').addEventListener('click',()=>{
+    const cat=$('#sellCatInput').value, qty=parseInt($('#sellQtyInput').value)||1, price=parseFloat($('#sellPriceInput').value);
+    const date=$('#sellDateInput').value||todayStr, note=$('#sellNoteInput').value.trim();
+    if(!cat||!price||price<=0){ alert('请填写菜品和有效的单价'); return; }
+    state.sellItems.push({id:uid(),cat,date,qty,price,amount:money(qty*price),note});
+    save(); renderAll(); $('#sellNoteInput').value='';
+    if(date!==todayStr) alert(`已记录到 ${date}（非今日），今日表格不显示，可在「浏览全部记录」中查看`);
+  });
+
+  // 新增种类
+  $('#addBuyCatBtn').addEventListener('click',()=>{
+    const v=$('#newBuyCat').value.trim(); if(!v)return; if(state.buyCats.includes(v)){alert('该种类已存在');return;} state.buyCats.push(v); $('#newBuyCat').value=''; save(); renderBuyCats();
+  });
+  $('#addSellCatBtn').addEventListener('click',()=>{
+    const v=$('#newSellCat').value.trim(); if(!v)return; if(state.sellCats.includes(v)){alert('该菜品已存在');return;} state.sellCats.push(v); $('#newSellCat').value=''; save(); renderSellCats();
+  });
+
+  // 新增单位
+  $('#addBuyUnitBtn').addEventListener('click',()=>{
+    const v=$('#newBuyUnit').value.trim(); if(!v)return; if(state.buyUnits.includes(v)){alert('该单位已存在');return;} state.buyUnits.push(v); $('#newBuyUnit').value=''; save(); renderBuyUnits();
+  });
+
+  // 浏览全部记录
+  $('#showAllBuyBtn').addEventListener('click',()=>openAllRecords('buy'));
+  $('#showAllSellBtn').addEventListener('click',()=>openAllRecords('sell'));
+  $('#showAllOtherBtn').addEventListener('click',()=>openAllRecords('other'));
+
+  // 下拉选项管理
+  $('#mgBuyCatBtn').addEventListener('click',()=>openManager('buyCat'));
+  $('#mgBuyUnitBtn').addEventListener('click',()=>openManager('buyUnit'));
+  $('#mgSellCatBtn').addEventListener('click',()=>openManager('sellCat'));
+  $('#mgOtherCatBtn').addEventListener('click',()=>openManager('otherCat'));
+  $('#mgOtherUnitBtn').addEventListener('click',()=>openManager('otherUnit'));
+
+  // 导入导出
+  $('#expBuyBtn').addEventListener('click',()=>exportData('buy'));
+  $('#impBuyBtn').addEventListener('click',()=>$('#impBuyFile').click());
+  $('#impBuyFile').addEventListener('change',e=>{ if(e.target.files[0]) importData('buy',e.target.files[0]); e.target.value=''; });
+  $('#expSellBtn').addEventListener('click',()=>exportData('sell'));
+  $('#impSellBtn').addEventListener('click',()=>$('#impSellFile').click());
+  $('#impSellFile').addEventListener('change',e=>{ if(e.target.files[0]) importData('sell',e.target.files[0]); e.target.value=''; });
+  $('#expOtherBtn').addEventListener('click',()=>exportData('other'));
+  $('#impOtherBtn').addEventListener('click',()=>$('#impOtherFile').click());
+  $('#impOtherFile').addEventListener('change',e=>{ if(e.target.files[0]) importData('other',e.target.files[0]); e.target.value=''; });
+
+  // 自动合计（固定支出）
+  const updOtherAuto=()=>{ const q=parseFloat($('#otherQtyInput').value)||0, p=parseFloat($('#otherPriceInput').value)||0; $('#otherAutoSum').textContent='¥'+money(q*p).toFixed(2); };
+  $('#otherQtyInput').addEventListener('input',updOtherAuto);
+  $('#otherPriceInput').addEventListener('input',updOtherAuto);
+
+  // 添加固定支出
+  $('#addOtherBtn').addEventListener('click',()=>{
+    const cat=$('#otherCatInput').value, qty=parseFloat($('#otherQtyInput').value), price=parseFloat($('#otherPriceInput').value);
+    const date=$('#otherDateInput').value||todayStr, note=$('#otherNoteInput').value.trim();
+    if(!cat||!price||price<=0){ alert('请填写种类和有效的单价'); return; }
+    state.otherItems.push({id:uid(),cat,date,unit:$('#otherUnitInput').value||'次',qty:qty||1,price,amount:money((qty||1)*price),note});
+    save(); renderAll(); $('#otherNoteInput').value='';
+    if(date!==todayStr) alert(`已记录到 ${date}（非今日），今日表格不显示，可在「浏览全部记录」中查看`);
+  });
+
+  // 新增固定支出种类/单位
+  $('#addOtherCatBtn').addEventListener('click',()=>{
+    const v=$('#newOtherCat').value.trim(); if(!v)return; if(state.otherCats.includes(v)){alert('该种类已存在');return;} state.otherCats.push(v); $('#newOtherCat').value=''; save(); renderOtherCats();
+  });
+  $('#addOtherUnitBtn').addEventListener('click',()=>{
+    const v=$('#newOtherUnit').value.trim(); if(!v)return; if(state.otherUnits.includes(v)){alert('该单位已存在');return;} state.otherUnits.push(v); $('#newOtherUnit').value=''; save(); renderOtherUnits();
+  });
+
+  // 全局委托：种类/单位编辑删除 + 记录编辑删除
+  document.addEventListener('click',e=>{
+    const btn=e.target.closest('[data-act]'); if(!btn)return;
+    const act=btn.dataset.act, id=btn.dataset.id, cat=btn.dataset.cat, unit=btn.dataset.unit;
+
+    if(act==='mgrAddBuyCat'){ const v=$('#mgrInput').value.trim(); if(!v)return; if(state.buyCats.includes(v)){alert('该种类已存在');return;} state.buyCats.push(v); save(); renderBuyCats(); openManager('buyCat'); return; }
+    if(act==='mgrAddBuyUnit'){ const v=$('#mgrInput').value.trim(); if(!v)return; if(state.buyUnits.includes(v)){alert('该单位已存在');return;} state.buyUnits.push(v); save(); renderBuyUnits(); openManager('buyUnit'); return; }
+    if(act==='mgrAddSellCat'){ const v=$('#mgrInput').value.trim(); if(!v)return; if(state.sellCats.includes(v)){alert('该菜品已存在');return;} state.sellCats.push(v); save(); renderSellCats(); openManager('sellCat'); return; }
+    if(act==='mgrAddOtherCat'){ const v=$('#mgrInput').value.trim(); if(!v)return; if(state.otherCats.includes(v)){alert('该种类已存在');return;} state.otherCats.push(v); save(); renderOtherCats(); openManager('otherCat'); return; }
+    if(act==='mgrAddOtherUnit'){ const v=$('#mgrInput').value.trim(); if(!v)return; if(state.otherUnits.includes(v)){alert('该单位已存在');return;} state.otherUnits.push(v); save(); renderOtherUnits(); openManager('otherUnit'); return; }
+
+    if(act==='delBuyCat'){ if(confirm(`删除种类「${cat}」？`)){ state.buyCats=state.buyCats.filter(x=>x!==cat); save(); renderBuyCats(); if(viewingManager==='buyCat') openManager('buyCat'); } return; }
+    if(act==='delSellCat'){ if(confirm(`删除菜品「${cat}」？`)){ state.sellCats=state.sellCats.filter(x=>x!==cat); save(); renderSellCats(); if(viewingManager==='sellCat') openManager('sellCat'); } return; }
+    if(act==='delOtherCat'){ if(confirm(`删除种类「${cat}」？`)){ state.otherCats=state.otherCats.filter(x=>x!==cat); save(); renderOtherCats(); if(viewingManager==='otherCat') openManager('otherCat'); } return; }
+    if(act==='delBuyUnit'){ if(confirm(`删除单位「${unit}」？`)){ state.buyUnits=state.buyUnits.filter(x=>x!==unit); save(); renderBuyUnits(); if(viewingManager==='buyUnit') openManager('buyUnit'); } return; }
+    if(act==='delOtherUnit'){ if(confirm(`删除单位「${unit}」？`)){ state.otherUnits=state.otherUnits.filter(x=>x!==unit); save(); renderOtherUnits(); if(viewingManager==='otherUnit') openManager('otherUnit'); } return; }
+    if(act==='editBuyCat'){ const v=prompt('修改种类名称',cat); if(v&&v.trim()&&!state.buyCats.includes(v.trim())){const nv=v.trim(); const i=state.buyCats.indexOf(cat); state.buyCats[i]=nv; state.buyItems.forEach(it=>{if(it.cat===cat)it.cat=nv;}); save(); renderAll(); if(viewingManager==='buyCat') openManager('buyCat');}else if(v&&v.trim()&&v.trim()!==cat){alert('该种类已存在');} return; }
+    if(act==='editSellCat'){ const v=prompt('修改菜品名称',cat); if(v&&v.trim()&&!state.sellCats.includes(v.trim())){const nv=v.trim(); const i=state.sellCats.indexOf(cat); state.sellCats[i]=nv; state.sellItems.forEach(it=>{if(it.cat===cat)it.cat=nv;}); save(); renderAll(); if(viewingManager==='sellCat') openManager('sellCat');}else if(v&&v.trim()&&v.trim()!==cat){alert('该菜品已存在');} return; }
+    if(act==='editOtherCat'){ const v=prompt('修改种类名称',cat); if(v&&v.trim()&&!state.otherCats.includes(v.trim())){const nv=v.trim(); const i=state.otherCats.indexOf(cat); state.otherCats[i]=nv; state.otherItems.forEach(it=>{if(it.cat===cat)it.cat=nv;}); save(); renderAll(); if(viewingManager==='otherCat') openManager('otherCat');}else if(v&&v.trim()&&v.trim()!==cat){alert('该种类已存在');} return; }
+    if(act==='editBuyUnit'){ const v=prompt('修改单位名称',unit); if(v&&v.trim()&&!state.buyUnits.includes(v.trim())){const nv=v.trim(); const i=state.buyUnits.indexOf(unit); state.buyUnits[i]=nv; state.buyItems.forEach(it=>{if((it.unit||'斤')===unit)it.unit=nv;}); save(); renderAll(); if(viewingManager==='buyUnit') openManager('buyUnit');}else if(v&&v.trim()&&v.trim()!==unit){alert('该单位已存在');} return; }
+    if(act==='editOtherUnit'){ const v=prompt('修改单位名称',unit); if(v&&v.trim()&&!state.otherUnits.includes(v.trim())){const nv=v.trim(); const i=state.otherUnits.indexOf(unit); state.otherUnits[i]=nv; state.otherItems.forEach(it=>{if((it.unit||'次')===unit)it.unit=nv;}); save(); renderAll(); if(viewingManager==='otherUnit') openManager('otherUnit');}else if(v&&v.trim()&&v.trim()!==unit){alert('该单位已存在');} return; }
+
+    if(act==='delBuy'){ if(confirm('删除这条支出记录？')){ state.buyItems=state.buyItems.filter(x=>x.id!==id); save(); renderAll(); if(viewingAll==='buy') openAllRecords('buy'); } return; }
+    if(act==='delSell'){ if(confirm('删除这条收入记录？')){ state.sellItems=state.sellItems.filter(x=>x.id!==id); save(); renderAll(); if(viewingAll==='sell') openAllRecords('sell'); } return; }
+    if(act==='delOther'){ if(confirm('删除这条固定支出记录？')){ state.otherItems=state.otherItems.filter(x=>x.id!==id); save(); renderAll(); if(viewingAll==='other') openAllRecords('other'); } return; }
+
+    if(act==='editBuy'){ const it=state.buyItems.find(x=>x.id===id); if(!it)return;
+      openModal(`
+        <label class="block text-xs text-gray-500 mb-1">种类 <span id="mCat">${it.cat}</span></label>
+        <label class="block text-xs text-gray-500 mb-1">日期</label>
+        <input id="mDate" type="date" value="${it.date}" class="w-full rounded-lg px-3 py-2 border border-gray-200">
+        <input id="mQty" type="number" value="${it.qty}" step="0.1" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">数量</p>
+        <input id="mUnit" type="text" value="${it.unit||'斤'}" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">单位</p>
+        <input id="mPrice" type="number" value="${it.price}" step="0.1" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">单价(元)</p>
+        <input id="mNote" type="text" value="${it.note||''}" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">备注（选填）</p>`,'编辑支出记录',true);
+      editCtx={type:'buy',id}; return; }
+    if(act==='editSell'){ const it=state.sellItems.find(x=>x.id===id); if(!it)return;
+      openModal(`
+        <label class="block text-xs text-gray-500 mb-1">菜品 <span id="mCat">${it.cat}</span></label>
+        <label class="block text-xs text-gray-500 mb-1">日期</label>
+        <input id="mDate" type="date" value="${it.date}" class="w-full rounded-lg px-3 py-2 border border-gray-200">
+        <input id="mQty" type="number" value="${it.qty}" min="1" step="1" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">份数</p>
+        <input id="mPrice" type="number" value="${it.price}" step="0.1" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">单价(元)</p>
+        <input id="mNote" type="text" value="${it.note||''}" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">备注（选填）</p>`,'编辑收入记录',true);
+      editCtx={type:'sell',id}; return; }
+    if(act==='editOther'){ const it=state.otherItems.find(x=>x.id===id); if(!it)return;
+      openModal(`
+        <label class="block text-xs text-gray-500 mb-1">种类 <span id="mCat">${it.cat}</span></label>
+        <label class="block text-xs text-gray-500 mb-1">日期</label>
+        <input id="mDate" type="date" value="${it.date}" class="w-full rounded-lg px-3 py-2 border border-gray-200">
+        <input id="mQty" type="number" value="${it.qty}" step="0.1" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">数量</p>
+        <input id="mUnit" type="text" value="${it.unit||'次'}" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">单位</p>
+        <input id="mPrice" type="number" value="${it.price}" step="0.1" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">单价(元)</p>
+        <input id="mNote" type="text" value="${it.note||''}" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">备注（选填）</p>`,'编辑固定支出记录',true);
+      editCtx={type:'other',id}; return; }
+  });
+
+  $('#modalCancel').addEventListener('click',closeModal);
+  $('#modalSave').addEventListener('click',()=>{
+    if(!editCtx)return;
+    const qty=parseFloat($('#mQty').value), price=parseFloat($('#mPrice').value), unit=($('#mUnit')?$('#mUnit').value:'斤'), date=($('#mDate')?$('#mDate').value:null), note=($('#mNote')?$('#mNote').value.trim():'');
+    if(!price||price<=0){ alert('单价无效'); return; }
+    if(editCtx.type==='buy'){ const it=state.buyItems.find(x=>x.id===editCtx.id); it.qty=qty||1; it.unit=unit||'斤'; it.price=price; it.amount=money((qty||1)*price); if(date)it.date=date; it.note=note; }
+    else if(editCtx.type==='other'){ const it=state.otherItems.find(x=>x.id===editCtx.id); it.qty=qty||1; it.unit=unit||'次'; it.price=price; it.amount=money((qty||1)*price); if(date)it.date=date; it.note=note; }
+    else { const it=state.sellItems.find(x=>x.id===editCtx.id); it.qty=parseInt(qty)||1; it.price=price; it.amount=money(it.qty*price); if(date)it.date=date; it.note=note; }
+    save(); const va=viewingAll; closeModal(); renderAll();
+    if(va) openAllRecords(va);
+  });
+}
+
+function renderAll(){ renderOverview(); renderBuyCats(); renderBuyUnits(); renderSellCats(); renderOtherCats(); renderOtherUnits(); renderBuyTable(); renderSellTable(); renderOtherTable(); renderSummaryBars(); renderDailySummary(); }
+
+/* ---------------- 启动 ---------------- */
+renderTodayStr(); renderAll(); bindEvents(); updBuyAuto(); updSellAuto();
+$('#buyDateInput').value=todayStr; $('#sellDateInput').value=todayStr; $('#otherDateInput').value=todayStr;
+</script>
+</body>
+</html>
