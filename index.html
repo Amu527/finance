@@ -931,6 +931,7 @@ function openTicketGroupModal(csv){
     +cards
     +'</div></div>';
   curPrintTickets=arr;
+  curTicketView=csv;
   $('#ticketModal').classList.remove('hidden');
 }
 function editTicket(id){
@@ -990,7 +991,12 @@ function calcTickTotal(){
   $('.tick-total').textContent='¥'+money(s).toFixed(2);
 }
 function delTicket(id){
-  confirmBox('确认删除这张票据？',()=>{ state.tickets=state.tickets.filter(x=>x.id!==id); save(); renderTickets(); });
+  confirmBox('确认删除这张票据？',()=>{ state.tickets=state.tickets.filter(x=>x.id!==id); save(); renderTickets(); refreshTicketView(); });
+}
+function refreshTicketView(){
+  if(!curTicketView) return;
+  if($('#ticketModal').classList.contains('hidden')) return;
+  openTicketGroupModal(curTicketView);
 }
 /* 生成一张窄条收银小票（明细四列对齐：名称 / 数量 / 单价 / 金额） */
 function ticketStripHTML(t){
@@ -1103,6 +1109,7 @@ function viewTicket(){
 function closeTicketModal(){ $('#ticketModal').classList.add('hidden'); }
 $('#ticketModal').addEventListener('click',e=>{ if(e.target.id==='ticketModal'||e.target===$('#ticketClose')) closeTicketModal(); });
 let curPrintTickets=null;
+let curTicketView=null;
 function printTicket(){
   const box=$('#printArea'); const saved=box.innerHTML;
   // 打印时切换成收银小票窄条样式，A4 一张张平铺
@@ -2355,7 +2362,7 @@ function bindEvents(){
       }else{
         const it=state.tickets.find(x=>x.id===editCtx.id); if(it){ it.date=date; it.note=note; it.rows=rows; }
       }
-      save(); closeModal(); renderAll(); return;
+      save(); closeModal(); renderAll(); refreshTicketView(); return;
     }
     if(editCtx.type==='asset'){
       const it=acctById(editCtx.id); if(!it){ closeModal(); return; }
