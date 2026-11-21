@@ -322,6 +322,10 @@
       <div class="mt-4 text-xs text-gray-400">
         <p class="font-semibold text-gray-500 mb-1">说明</p>
         <p>总资产为所有账户余额之和，与收入支出、借款、人情分开记账。数据仅保存在本机浏览器 (localStorage)。</p>
+        <div class="mt-2 flex items-center gap-2">
+          <button onclick="openSyncSettings()" class="rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 text-xs">⚙️ 同步设置</button>
+          <span id="syncStateTxt" class="text-xs"></span>
+        </div>
       </div>
     </div>
   </section>
@@ -407,7 +411,10 @@
     <div class="card p-4 mt-4 fade">
       <div class="flex items-center justify-between mb-3">
         <h2 class="font-bold text-gray-800">🧾 收银票据</h2>
-        <button id="addTicketBtn" class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 text-sm">＋ 新建票据</button>
+        <div class="flex items-center gap-2">
+          <button onclick="openTicketGroupModal('ALL')" class="rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 text-sm">📄 查看全部</button>
+          <button id="addTicketBtn" class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 text-sm">＋ 新建票据</button>
+        </div>
       </div>
       <div id="ticketList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
       <p id="ticketEmpty" class="text-center text-gray-400 text-sm py-6">暂无票据，点击「新建票据」开始收银 📝</p>
@@ -666,7 +673,9 @@ function emptyData(){
 
 /* ---------------- 状态 ---------------- */
 let state = JSON.parse(localStorage.getItem('sanjinLedger')||'null');
-const SYNC={enabled:false,lastTs:0,pushT:null,pollT:null};
+const SYNC={enabled:false,lastTs:0,pushT:null,pollT:null,
+  base:(localStorage.getItem('sanjinSyncBase')||'').replace(/\/+$/,''),
+  key:localStorage.getItem('sanjinSyncKey')||''};
 if(!state){ state=emptyData(); save(); }
 if(!state.buyUnits){ state.buyUnits=['斤','公斤','两','袋','瓶','箱','个']; }
 if(!state.otherCats){ state.otherCats=['房租','水电费','燃气费','煤气','包装袋','卫生费','其他']; }
@@ -686,11 +695,14 @@ if(state.accounts){ state.accounts.forEach(function(a){ if(a.group==='bank'&&a.n
 if(state.accounts && !state.accounts.some(function(a){return a.name==='收款微信';})){ state.accounts.push({id:'ac_wx_pay',group:'wechat',name:'收款微信',balance:0}); save(); }
 function save(){ localStorage.setItem('sanjinLedger', JSON.stringify(state)); if(typeof syncPush==='function') syncPush(); }
 /* ---------------- 局域网同步 ---------------- */
+function syncUrl(){ return SYNC.base+'/api/data'; }
+function syncHeaders(extra){ var h=extra||{}; if(SYNC.key) h['X-Sync-Key']=SYNC.key; return h; }
+function setSyncState(txt){ var el=$('#syncStateTxt'); if(el) el.textContent=txt; }
 function syncPush(){
   if(!SYNC.enabled) return;
   clearTimeout(SYNC.pushT);
   SYNC.pushT=setTimeout(function(){
-    fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:state})})
+    fetch(syncUrl(),{method:'POST',headers:syncHeaders({'Content-Type':'application/json'}),body:JSON.stringify({data:state})})
       .then(function(r){return r.json();}).then(function(res){ if(res&&res.ts) SYNC.lastTs=res.ts; }).catch(function(){});
   },300);
 }
@@ -704,19 +716,43 @@ function applyRemote(data){
 function startSyncPoll(){
   if(SYNC.pollT) return;
   SYNC.pollT=setInterval(function(){
-    fetch('/api/data').then(function(r){return r.json();}).then(function(res){
+    fetch(syncUrl(),{headers:syncHeaders(),cache:'no-store'}).then(function(r){return r.json();}).then(function(res){
       if(res&&res.ts&&res.ts>SYNC.lastTs){ SYNC.lastTs=res.ts; applyRemote(res.data); }
     }).catch(function(){});
   },3000);
 }
 function syncInit(){
-  fetch('/api/data').then(function(r){return r.json();}).then(function(res){
-    SYNC.enabled=true;
+  fetch(syncUrl(),{headers:syncHeaders(),cache:'no-store'}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(res){
+    SYNC.enabled=true; setSyncState('已连接同步');
     const ts=(res&&res.ts)||0;
     if(ts>0&&res.data){ SYNC.lastTs=ts; applyRemote(res.data); }
     else { syncPush(); }
     startSyncPoll();
-  }).catch(function(){});
+  }).catch(function(){ setSyncState('未连接 · 本机模式'); });
+}
+function openSyncSettings(){
+  openModal(
+    '<label class="block text-xs text-gray-500 mb-1">同步服务器地址</label>'
+    +'<input id="syBase" type="text" placeholder="局域网留空；公网填 https://xxx.trycloudflare.com" value="'+esc(SYNC.base||'')+'" class="w-full rounded-lg px-3 py-2 border border-gray-200 text-sm">'
+    +'<p class="text-xs text-gray-400 mt-1">当前状态：<span id="syState">'+(SYNC.enabled?'已连接':'未连接')+'</span></p>'
+    +'<label class="block text-xs text-gray-500 mb-1 mt-3">同步口令（服务端设置了才需要填）</label>'
+    +'<input id="syKey" type="text" value="'+esc(SYNC.key||'')+'" class="w-full rounded-lg px-3 py-2 border border-gray-200 text-sm">'
+    +'<button onclick="saveSyncSettings()" class="mt-3 w-full rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white py-2 text-sm">保存并连接</button>'
+    +'<p class="text-xs text-gray-400 mt-2 leading-relaxed">局域网内可留空，自动用当前网址；用 GitHub Pages 打开时，填家里隧道生成的 https 地址。</p>'
+  ,'同步设置',false);
+}
+function saveSyncSettings(){
+  const b=$('#syBase')?$('#syBase').value.trim():'';
+  const k=$('#syKey')?$('#syKey').value.trim():'';
+  SYNC.base=b.replace(/\/+$/,''); SYNC.key=k;
+  localStorage.setItem('sanjinSyncBase',SYNC.base);
+  localStorage.setItem('sanjinSyncKey',SYNC.key);
+  SYNC.enabled=false; SYNC.lastTs=0;
+  if(SYNC.pollT){ clearInterval(SYNC.pollT); SYNC.pollT=null; }
+  closeModal(); setSyncState('正在连接…'); syncInit();
 }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
@@ -828,7 +864,8 @@ function renderTickets(){
   list.innerHTML=groups.map(function(g){
     let total=0; g.tickets.forEach(function(t){ total+=ticketTotal(t); });
     const label=g.label==='无日期'?g.label:(g.label+'（6天一组）');
-    return '<button type="button" data-days="'+g.days.join(',')+'" onclick="openTicketGroupModal(this.dataset.days)" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white border border-gray-100 shadow-sm hover:bg-gray-50 mb-2 text-left">'
+    const key=g.days.length?g.days.join(','):'NODATE';
+    return '<button type="button" data-days="'+key+'" onclick="openTicketGroupModal(this.dataset.days)" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white border border-gray-100 shadow-sm hover:bg-gray-50 mb-2 text-left">'
       +'<span class="flex items-center gap-2 min-w-0"><span class="text-gray-400">▸</span>'
       +'<span class="font-semibold text-gray-800 text-sm">'+esc(label)+'</span>'
       +'<span class="text-xs text-gray-400 shrink-0">'+g.tickets.length+' 张</span></span>'
@@ -858,12 +895,21 @@ function buildWeekGroups(ts){
   return groups;
 }
 function openTicketGroupModal(csv){
-  const days=(csv||'').split(',').filter(Boolean);
-  const arr=(state.tickets||[]).filter(function(t){return t.date && days.indexOf(t.date)>=0;});
+  let arr, label;
+  if(csv==='ALL'){
+    arr=[...(state.tickets||[])].sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+    label='全部票据';
+  } else if(csv==='NODATE'){
+    arr=(state.tickets||[]).filter(function(t){return !t.date;});
+    label='无日期';
+  } else {
+    const days=(csv||'').split(',').filter(Boolean);
+    arr=(state.tickets||[]).filter(function(t){return t.date && days.indexOf(t.date)>=0;});
+    label=days.length?(days.length>1?days[0]+' ~ '+days[days.length-1]:days[0]):'无日期';
+  }
   const box=document.getElementById('printArea');
   if(!arr.length){ box.innerHTML='<div class="ticket-viewport"><div class="text-center text-gray-400 py-16">无票据</div></div>'; $('#ticketModal').classList.remove('hidden'); return; }
   let total=0; arr.forEach(function(t){ total+=ticketTotal(t); });
-  const label=days.length?(days.length>1?days[0]+' ~ '+days[days.length-1]:days[0]):'无日期';
   const cards=arr.map(function(t){
     const tt=ticketTotal(t), id=t.id;
     const items=t.rows.filter(function(r){return r.name||r.price;}).map(function(r){
