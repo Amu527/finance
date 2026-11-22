@@ -126,12 +126,16 @@
     </div>
     <div class="flex flex-col items-end gap-1">
       <div id="homeClockG" class="text-sm text-gray-500 tabular-nums">--</div>
-      <button id="hdBackBtn" onclick="goTab('landing')" class="text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100">↩ 放回主页</button>
+      <div class="flex items-center gap-1.5">
+        <button onclick="openSyncSettings()" class="text-xs px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200">⚙️ 同步</button>
+        <button id="hdBackBtn" onclick="goTab('landing')" class="text-xs px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100">↩ 放回主页</button>
+      </div>
     </div>
   </header>
 
   <!-- ========== 主页（品牌落地页，点击任意处进入首页） ========== -->
-      <section id="panel-landing" class="panel w-full min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center cursor-pointer select-none" onclick="goTab('home')">
+      <section id="panel-landing" class="panel relative w-full min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center cursor-pointer select-none" onclick="goTab('home')">
+    <button onclick="event.stopPropagation();openSyncSettings()" class="absolute top-4 right-4 z-10 text-xs px-3 py-1.5 rounded-lg bg-white/85 border border-gray-200 text-gray-600 hover:bg-white shadow-sm">⚙️ 同步设置</button>
     <div class="text-center px-6 py-8">
       <div class="flex items-center justify-center gap-3 mb-4">
         <div class="w-14 h-14 rounded-2xl bg-green-500 flex items-center justify-center text-3xl font-bold text-black shadow-md">叁</div>
@@ -731,7 +735,7 @@ function syncInit(){
     if(ts>0&&res.data){ SYNC.lastTs=ts; applyRemote(res.data); }
     else { syncPush(); }
     startSyncPoll();
-  }).catch(function(){ setSyncState('未连接 · 本机模式'); });
+  }).catch(function(e){ setSyncState('未连接 · 本机模式（'+(e&&e.message?e.message:'网络不可达')+'）'); });
 }
 function openSyncSettings(){
   openModal(
@@ -740,9 +744,28 @@ function openSyncSettings(){
     +'<p class="text-xs text-gray-400 mt-1">当前状态：<span id="syState">'+(SYNC.enabled?'已连接':'未连接')+'</span></p>'
     +'<label class="block text-xs text-gray-500 mb-1 mt-3">同步口令（服务端设置了才需要填）</label>'
     +'<input id="syKey" type="text" value="'+esc(SYNC.key||'')+'" class="w-full rounded-lg px-3 py-2 border border-gray-200 text-sm">'
+    +'<button onclick="testSyncConn()" class="mt-3 w-full rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 text-sm">🔍 测试连接</button>'
+    +'<p id="syTest" class="text-xs mt-1 text-gray-500"></p>'
     +'<button onclick="saveSyncSettings()" class="mt-3 w-full rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white py-2 text-sm">保存并连接</button>'
     +'<p class="text-xs text-gray-400 mt-2 leading-relaxed">局域网内可留空，自动用当前网址；用 GitHub Pages 打开时，填家里隧道生成的 https 地址。</p>'
   ,'同步设置',false);
+}
+function testSyncConn(){
+  const b=$('#syBase')?$('#syBase').value.trim().replace(/\/+$/,''):'';
+  const k=$('#syKey')?$('#syKey').value.trim():'';
+  const st=$('#syTest');
+  if(st) st.textContent='测试中…';
+  const t=setTimeout(function(){ if(st) st.textContent='❌ 超时：隧道可能没开或地址已失效'; },15000);
+  fetch((b||'')+'/api/ping',{cache:'no-store'}).then(function(r){
+    clearTimeout(t);
+    if(!r.ok){ if(st) st.textContent='⚠️ 服务可达但返回 HTTP '+r.status; return; }
+    return fetch((b||'')+'/api/data',{headers:k?{'X-Sync-Key':k}:{},cache:'no-store'}).then(function(r2){
+      if(st) st.textContent = r2.ok ? '✅ 连接成功，可以点「保存并连接」' : (r2.status===401 ? '❌ 地址通，但同步口令不对' : '⚠️ 数据接口返回 HTTP '+r2.status);
+    });
+  }).catch(function(){
+    clearTimeout(t);
+    if(st) st.textContent = b ? '❌ 连不上：确认 tunnel.bat 正在运行、地址是最新的' : '❌ 未填地址（局域网内可留空，公网必须填隧道地址）';
+  });
 }
 function saveSyncSettings(){
   const b=$('#syBase')?$('#syBase').value.trim():'';
