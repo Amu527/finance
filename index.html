@@ -39,6 +39,7 @@
   .ticket-viewport{height:calc(100vh - 118px);overflow:auto;padding:6mm;background:#e5e7eb;border-radius:0 0 12px 12px;display:flex;justify-content:center;align-items:flex-start;box-sizing:border-box}
   .ticket-zoom{margin:0 auto}
   .ticket-sheet{width:210mm;height:297mm;overflow:hidden;background:#fff;color:#111;margin:0 auto;padding:5mm;box-sizing:border-box;display:flex;flex-wrap:wrap;gap:4mm;align-content:flex-start;justify-content:center;position:relative;page-break-inside:avoid}
+  .ticket-strip.tk-hidden{visibility:hidden}
   .ticket-strip{width:60mm;min-height:56mm;background:#fff;border:1px dashed #bbb;padding:3mm 3mm 2.5mm;box-sizing:border-box;display:flex;flex-direction:column;font-family:"Courier New",Consolas,monospace;font-size:3.3mm;line-height:1.4;color:#111}
   .ticket-strip .ts-center{text-align:center}
   .ticket-strip .ts-title{font-size:4.6mm;font-weight:bold;letter-spacing:0.5mm}
@@ -71,6 +72,7 @@
     #ticketModal>.bg-gray-200{box-shadow:none !important;background:#fff !important}
     #ticketModal .p-3{display:none !important}
     #printArea, #printArea *{visibility:visible !important}
+    #printArea .tk-hidden, #printArea .tk-hidden *{visibility:hidden !important}
     #printArea{position:absolute;left:0;top:0;width:210mm}
     @page{size:A4 portrait;margin:0}
     /* 打印时关闭屏幕缩放，恢复真实 A4 尺寸 */
@@ -619,6 +621,7 @@
       <div class="flex items-center justify-between p-3 mx-auto" style="width:min(94vw,210mm);">
         <span class="text-sm font-bold text-gray-700">🧾 三金小本买卖票据</span>
         <div class="flex gap-2">
+          <button id="ticketSelPrint" class="rounded-lg bg-white border border-emerald-500 text-emerald-600 px-4 py-2 text-sm font-bold">☑ 选择打印</button>
           <button id="ticketPrint" class="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 text-sm font-bold shadow">🖨 打印</button>
           <button id="ticketClose" class="rounded-lg bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 text-sm">✕ 关闭</button>
         </div>
@@ -939,7 +942,8 @@ function openTicketGroupModal(csv){
       const a=money((Number(r.qty)||0)*(Number(r.price)||0));
       return '<tr><td class="tk-n">'+esc(r.name||'—')+'</td><td>×'+(r.qty||'')+'</td><td>'+(r.price||'')+'</td><td class="tk-a">'+(a>0?('￥'+a.toFixed(2)):'')+'</td></tr>';
     }).join('')||'<tr><td colspan="4">（空票据）</td></tr>';
-    return '<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3">'
+    return '<div class="relative bg-white rounded-xl border border-gray-100 shadow-sm p-3">'
+      +'<label class="ticket-pick-wrap hidden absolute -top-2 -right-2 z-10 items-center gap-1 bg-white border-2 border-emerald-500 rounded-lg px-1.5 py-0.5 cursor-pointer shadow"><input type="checkbox" class="ticket-pick" data-id="'+id+'"><span class="text-[10px] text-gray-500">选</span></label>'
       +'<div class="flex items-center justify-between mb-2"><span class="text-xs font-bold text-gray-800">NO.'+(String(id).slice(-4)).toUpperCase()+'</span><span class="text-xs text-gray-400">'+esc(t.date||'')+'</span></div>'
       +'<table class="tk-table"><tr><th>名称</th><th>数量</th><th>单价</th><th>金额</th></tr>'+items+'</table>'
       +'<div class="flex items-center justify-between border-t border-gray-100 pt-2 mt-2">'
@@ -1061,9 +1065,14 @@ function fitTicketZoom(scope){
   zoom.style.zoom=scale<1?String(scale):'';
 }
 /* 把票据分装成多张 A4，每张 A4 为一组（保留组内小票） */
-function buildTicketGroups(tickets){
+function buildTicketGroups(tickets, selIds){
   const order=tickets.slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
-  const strips=order.map(ticketStripHTML);
+  // 传入 selIds 时，未选中的小票保留原位置但隐藏内容（占位不打印），排版与槽位不变
+  const strips=order.map(function(t){
+    var h=ticketStripHTML(t);
+    if(selIds && selIds.indexOf(t.id)<0) h=h.replace('class="ticket-strip"','class="ticket-strip tk-hidden"');
+    return h;
+  });
   if(!strips.length) return [];
   const m=document.createElement('div');
   m.style.cssText='position:absolute;visibility:hidden;left:-99999px;top:0;width:200mm;';
@@ -1129,7 +1138,7 @@ function viewTicket(){
   box.innerHTML='<div class="ticket-viewport"><div class="p-3 pb-6">'+groups.map(function(g,i){return ticketGroupHTML(g,i);}).join('')+'</div></div>';
   $('#ticketModal').classList.remove('hidden');
 }
-function closeTicketModal(){ $('#ticketModal').classList.add('hidden'); }
+function closeTicketModal(){ $('#ticketModal').classList.add('hidden'); exitTicketSel(); }
 $('#ticketModal').addEventListener('click',e=>{ if(e.target.id==='ticketModal'||e.target===$('#ticketClose')) closeTicketModal(); });
 let curPrintTickets=null;
 let curTicketView=null;
@@ -1143,6 +1152,50 @@ function printTicket(){
   setTimeout(()=>{ window.print(); if(box.innerHTML!==saved) box.innerHTML=saved; },150);
 }
 $('#ticketPrint').addEventListener('click',printTicket);
+
+/* 选择打印：勾选目标小票，只打印勾选项，排版沿用 A4 三列窄条 */
+let ticketSelMode=false;
+function updateTicketSelBtn(){
+  const b=$('#ticketSelPrint'); if(!b) return;
+  if(!ticketSelMode){
+    b.textContent='☑ 选择打印';
+    b.className='rounded-lg bg-white border border-emerald-500 text-emerald-600 px-4 py-2 text-sm font-bold';
+  } else {
+    const n=document.querySelectorAll('.ticket-pick:checked').length;
+    b.textContent='🖨 打印选中 ('+n+')';
+    b.className='rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-bold';
+  }
+}
+function exitTicketSel(){
+  ticketSelMode=false;
+  document.querySelectorAll('.ticket-pick-wrap').forEach(function(w){ w.classList.add('hidden'); w.classList.remove('flex'); });
+  document.querySelectorAll('.ticket-pick').forEach(function(cb){ cb.checked=false; });
+  updateTicketSelBtn();
+}
+function toggleTicketSel(){
+  if(!ticketSelMode){
+    ticketSelMode=true;
+    document.querySelectorAll('.ticket-pick-wrap').forEach(function(w){ w.classList.remove('hidden'); w.classList.add('flex'); });
+    updateTicketSelBtn();
+    showTip('勾选要打印的小票，再点「打印选中」');
+    return;
+  }
+  const ids=Array.prototype.slice.call(document.querySelectorAll('.ticket-pick:checked')).map(function(cb){ return cb.dataset.id; });
+  if(!ids.length){ exitTicketSel(); showTip('已退出选择打印'); return; }
+  printSelectedTickets(ids);
+}
+function printSelectedTickets(ids){
+  const all=curPrintTickets||[];
+  const list=all.filter(function(t){ return ids.indexOf(t.id)>=0; });
+  if(!list.length){ showTip('没有可打印的小票'); return; }
+  const box=$('#printArea'); const saved=box.innerHTML;
+  // 用完整列表排版，未勾选的留空占位，勾选项位置与原来完全一致
+  const groups=buildTicketGroups(all, ids);
+  box.innerHTML='<div class="ticket-viewport">'+groups.map(function(g){ return '<div class="ticket-group">'+g.html+'</div>'; }).join('')+'</div>';
+  setTimeout(function(){ window.print(); box.innerHTML=saved; updateTicketSelBtn(); },150);
+}
+const _tsp=$('#ticketSelPrint'); if(_tsp) _tsp.addEventListener('click',toggleTicketSel);
+const _pa=$('#printArea'); if(_pa) _pa.addEventListener('change',function(e){ if(e.target&&e.target.classList&&e.target.classList.contains('ticket-pick')) updateTicketSelBtn(); });
 window.addEventListener('resize',()=>{ if(!document.getElementById('ticketModal').classList.contains('hidden')) fitTicketZoom(); });
 
 function renderBuyCats(){
@@ -1935,8 +1988,30 @@ function renderAssets(){
 }
 function editAsset(id){
   const it=acctById(id); if(!it) return;
-  openModal('<label class="block text-xs text-gray-500 mb-1">'+esc(it.name)+' 当前余额</label><input id="aBalance" type="number" min="0" step="0.01" value="'+money(it.balance||0)+'" class="w-full rounded-lg px-3 py-2 border border-gray-200">','修改 '+esc(it.name)+' 余额',true);
+  openModal(''
+    +'<div class="text-xs text-gray-500">'+esc(it.name)+' 当前余额</div>'
+    +'<div class="text-2xl font-bold text-gray-800 mb-3">￥'+money(it.balance||0).toFixed(2)+'</div>'
+    +'<label class="block text-xs text-gray-500 mb-1">调整金额（默认 0）</label>'
+    +'<input id="aAdjust" type="number" min="0" step="0.01" value="0" class="w-full rounded-lg px-3 py-2 border border-gray-200">'
+    +'<div class="grid grid-cols-2 gap-2 mt-2">'
+    +'<button type="button" onclick="adjustAsset(this.dataset.id,1)" data-id="'+it.id+'" class="rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white py-2 text-sm font-medium">＋ 增加余额</button>'
+    +'<button type="button" onclick="adjustAsset(this.dataset.id,-1)" data-id="'+it.id+'" class="rounded-xl bg-red-500 hover:bg-red-600 text-white py-2 text-sm font-medium">－ 减少余额</button>'
+    +'</div>'
+    +'<div class="mt-4 pt-3 border-t border-gray-100">'
+    +'<label class="block text-xs text-gray-500 mb-1">直接设为余额</label>'
+    +'<input id="aBalance" type="number" step="0.01" value="'+money(it.balance||0)+'" class="w-full rounded-lg px-3 py-2 border border-gray-200">'
+    +'</div>'
+  ,'编辑 '+esc(it.name)+' 余额',true);
   editCtx={type:'asset',id};
+}
+function adjustAsset(id,dir){
+  const it=acctById(id); if(!it) return;
+  const el=$('#aAdjust');
+  const v=parseFloat(el?el.value:'0');
+  if(!v||v<=0){ showTip('请输入要调整的金额'); return; }
+  const nb=money((Number(it.balance)||0)+dir*v);
+  it.balance=nb; save(); closeModal(); renderAssets();
+  showTip((dir>0?'已增加 ':'已减少 ')+'￥'+money(v).toFixed(2)+'，当前余额 ￥'+nb.toFixed(2));
 }
 function assetAddBtn(g){ if(g!=='wechat'&&g!=='bank') return ''; const label=g==='wechat'?'添加微信':'添加银行卡'; return '<button onclick="newAssetOf(\''+g+'\')" class="ml-2 text-xs px-2 py-0.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">'+label+'</button>'; }
 function newAssetGeneral(){
@@ -2145,6 +2220,7 @@ function bindEvents(){
   // 添加支出（多行批量 + 有无票据）
   $('#addBuyBtn').addEventListener('click',()=>{
     const date=$('#buyDateInput').value||todayStr, defNote=$('#buyNoteInput').value.trim();
+    const defAcct=$('#buyPayAcct')?($('#buyPayAcct').value||null):null;
     const opt=$('#buyTicketOpt').value;   // yes=有票据(不生成) no=无票据(自动生成)
     const rows=[];
     $$('#buyRows .buy-row').forEach(r=>{
@@ -2152,7 +2228,7 @@ function bindEvents(){
       const qty=parseFloat(r.querySelector('.buy-qty').value);
       const price=parseFloat(r.querySelector('.buy-price').value);
       const unit=r.querySelector('.buy-unit').value||'斤';
-      const acctEl=r.querySelector('.buy-acct'); const acct=acctEl?(acctEl.value||null):null;
+      const acctEl=r.querySelector('.buy-acct'); const acct=(acctEl&&acctEl.value)?acctEl.value:defAcct;
       const noteEl=r.querySelector('.buy-note'); const note=(noteEl && noteEl.value.trim())||defNote;
       if(!cat) return;
       rows.push({cat,unit,qty:qty||1,price:price||0,acct,note});
@@ -2176,6 +2252,10 @@ function bindEvents(){
     if(date!==todayStr) showTip(`已记录到 ${date}（非今日），今日表格不显示，可在「浏览全部记录」中查看`);
   });
   // 新增/删除支出明细行
+  // 顶部“默认支付方式”改动时，整单所有行同步跟随（之后仍可逐行微调）
+  const _bpa=$('#buyPayAcct'); if(_bpa) _bpa.addEventListener('change',function(e){
+    const nv=e.target.value; $$('#buyRows .buy-acct').forEach(function(el){ el.value=nv; });
+  });
   $('#addBuyRowBtn').addEventListener('click',addBuyRow);
   document.addEventListener('click',e=>{
     const d=e.target.closest('.del-buy-row'); if(!d) return;
