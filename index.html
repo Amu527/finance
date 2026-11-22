@@ -699,7 +699,7 @@ if(state.accounts){ state.accounts.forEach(function(a){ if(a.group==='bank'&&a.n
 if(state.accounts && !state.accounts.some(function(a){return a.name==='收款微信';})){ state.accounts.push({id:'ac_wx_pay',group:'wechat',name:'收款微信',balance:0}); save(); }
 function save(){ localStorage.setItem('sanjinLedger', JSON.stringify(state)); if(typeof syncPush==='function') syncPush(); }
 /* ---------------- 局域网同步 ---------------- */
-function syncUrl(){ return SYNC.base+'/api/data'; }
+function syncUrl(){ return SYNC.base+'/api/app/finance/data'; }
 function syncHeaders(extra){ var h=extra||{}; if(SYNC.key) h['X-Sync-Key']=SYNC.key; return h; }
 function setSyncState(txt){ var el=$('#syncStateTxt'); if(el) el.textContent=txt; }
 function syncPush(){
@@ -756,10 +756,10 @@ function testSyncConn(){
   const st=$('#syTest');
   if(st) st.textContent='测试中…';
   const t=setTimeout(function(){ if(st) st.textContent='❌ 超时：隧道可能没开或地址已失效'; },15000);
-  fetch((b||'')+'/api/ping',{cache:'no-store'}).then(function(r){
+  fetch((b||'')+'/api/app/finance/ping',{cache:'no-store'}).then(function(r){
     clearTimeout(t);
     if(!r.ok){ if(st) st.textContent='⚠️ 服务可达但返回 HTTP '+r.status; return; }
-    return fetch((b||'')+'/api/data',{headers:k?{'X-Sync-Key':k}:{},cache:'no-store'}).then(function(r2){
+    return fetch((b||'')+'/api/app/finance/data',{headers:k?{'X-Sync-Key':k}:{},cache:'no-store'}).then(function(r2){
       if(st) st.textContent = r2.ok ? '✅ 连接成功，可以点「保存并连接」' : (r2.status===401 ? '❌ 地址通，但同步口令不对' : '⚠️ 数据接口返回 HTTP '+r2.status);
     });
   }).catch(function(){
