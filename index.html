@@ -374,6 +374,7 @@
             <span class="text-xs text-gray-500 col-span-2 md:col-span-2 self-end pb-1">金额合计：<b class="text-red-500 text-sm" id="buyAutoSum">¥0.00</b></span>
           </div>
           <button id="addBuyBtn" class="mt-2 w-full rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-medium py-2">＋ 添加</button>
+          <button id="ocrBuyBtn" class="mt-2 w-full rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium py-2">📷 图片 / 小票 生成支出</button>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
@@ -523,6 +524,9 @@
             <label class="flex items-center gap-1 text-xs text-gray-500">日期
               <input id="otherDateInput" type="date" class="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white">
             </label>
+            <label class="flex items-center gap-1 text-xs text-gray-500">支付方式
+              <select id="otherPayAcct" class="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white"></select>
+            </label>
             <span class="text-xs text-gray-500">金额自动合计：<b class="text-purple-500 text-sm" id="otherAutoSum">¥0.00</b></span>
           </div>
           <button id="addOtherBtn" class="col-span-2 md:col-span-4 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium py-2">＋ 添加</button>
@@ -530,7 +534,7 @@
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead><tr class="text-gray-400 text-xs border-b">
-              <th class="text-left py-2">种类</th><th class="text-left py-2">数量</th><th class="text-left py-2">单价</th><th class="text-left py-2">金额</th><th class="text-right py-2">操作</th>
+              <th class="text-left py-2">种类</th><th class="text-left py-2">数量</th><th class="text-left py-2">单价</th><th class="text-left py-2">金额</th><th class="text-left py-2">支付</th><th class="text-right py-2">操作</th>
             </tr></thead>
             <tbody id="otherTableBody"></tbody>
           </table>
@@ -641,6 +645,56 @@
       <div id="zoomBody" style="height:75vh;overflow:auto"></div>
     </div>
   </div>
+
+  <!-- 图片 / 小票 生成支出 -->
+  <div id="ocrModal" class="hidden fixed inset-0 bg-black/50 z-[68] flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[92vh] flex flex-col">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <h3 class="font-bold text-gray-800">📷 图片 / 小票 生成支出</h3>
+        <button onclick="closeOcrModal()" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1">
+        <div class="flex gap-2 mb-3">
+          <button id="ocrTabImg" onclick="switchOcrTab('img')" class="flex-1 rounded-lg py-2 text-sm font-medium bg-indigo-500 text-white">📷 上传图片识别</button>
+          <button id="ocrTabTk" onclick="switchOcrTab('tk')" class="flex-1 rounded-lg py-2 text-sm font-medium bg-gray-100 text-gray-600">🧾 从已有小票选择</button>
+        </div>
+        <div id="ocrPaneImg">
+          <input id="ocrFile" type="file" accept="image/*" capture="environment" class="block w-full text-xs text-gray-500 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-indigo-600">
+          <div id="ocrImg" class="mt-2 rounded-xl bg-gray-50 border border-dashed border-gray-200 min-h-[80px] flex items-center justify-center overflow-hidden"></div>
+          <div class="mt-2 flex items-center gap-2">
+            <button id="ocrRunBtn" class="rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 text-sm">🔍 开始识别</button>
+            <span id="ocrStatus" class="text-xs text-gray-500"></span>
+          </div>
+          <details class="mt-2"><summary class="text-xs text-gray-400 cursor-pointer">查看识别原始文字</summary>
+            <textarea id="ocrText" rows="4" class="mt-1 w-full rounded-lg px-2 py-1.5 text-xs border border-gray-200"></textarea>
+          </details>
+        </div>
+        <div id="ocrPaneTk" class="hidden">
+          <select id="ocrTicketSel" class="w-full rounded-lg px-2 py-2 text-sm border border-gray-200 bg-white"></select>
+          <button id="ocrLoadTkBtn" class="mt-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 text-sm">载入这张小票</button>
+        </div>
+        <div class="mt-4">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs text-gray-500 font-medium">明细预览（可直接修改）</span>
+            <button id="ocrAddRowBtn" class="text-xs rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 px-2 py-1">＋ 手动加一行</button>
+          </div>
+          <div id="ocrRows" class="space-y-1.5"></div>
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-2 items-end">
+          <label class="flex flex-col gap-1 text-xs text-gray-500">日期<input id="ocrDate" type="date" class="rounded-lg px-2 py-1.5 text-sm border border-gray-200"></label>
+          <label class="flex flex-col gap-1 text-xs text-gray-500">支付方式<select id="ocrAcct" class="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white"></select></label>
+        </div>
+        <label class="mt-2 flex items-center gap-2 text-xs text-gray-600"><input id="ocrMakeTk" type="checkbox" checked> 同时生成收银小票</label>
+      </div>
+      <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-2">
+        <span class="text-sm text-gray-600">合计 <b class="text-red-500" id="ocrSum">¥0.00</b></span>
+        <div class="flex gap-2">
+          <button onclick="closeOcrModal()" class="rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 text-sm">取消</button>
+          <button id="ocrGenBtn" class="rounded-lg bg-red-500 hover:bg-red-600 text-white px-4 py-2 text-sm font-medium">✅ 生成支出</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- 可输入下拉框：支出种类 / 收入种类 -->
@@ -718,7 +772,7 @@ function applyRemote(data){
   state=data;
   localStorage.setItem('sanjinLedger',JSON.stringify(state));
   try{ renderAll(); }catch(e){}
-  try{ fillAcctSelect('buyPayAcct'); refreshBuyRowAccts(); fillAcctSelect('sellAcct',(state.accounts&&state.accounts.find(function(a){return a.name==='收款微信';})||{}).id); }catch(e){}
+  try{ fillAcctSelect('buyPayAcct'); fillAcctSelect('otherPayAcct'); refreshBuyRowAccts(); fillAcctSelect('sellAcct',(state.accounts&&state.accounts.find(function(a){return a.name==='收款微信';})||{}).id); }catch(e){}
 }
 function startSyncPoll(){
   if(SYNC.pollT) return;
@@ -1324,6 +1378,7 @@ function renderOtherTable(){
       <td class="py-2 text-gray-600">${i.qty} ${i.unit||'次'}</td>
       <td class="py-2 text-gray-600">¥${i.price}</td>
       <td class="py-2 font-semibold text-purple-500">¥${money(i.amount)}</td>
+      <td class="py-2 text-gray-600">${i.acct?esc((acctById(i.acct)||{}).name||'已删除账户'):'—'}</td>
       <td class="py-2 text-right">
         <button class="text-xs text-gray-400 hover:text-blue-500 mr-1" data-act="editOther" data-id="${i.id}">编辑</button>
         <button class="text-xs text-gray-400 hover:text-red-500" data-act="delOther" data-id="${i.id}">删除</button>
@@ -2031,7 +2086,7 @@ function delAccount(id){
   const it=acctById(id); if(!it) return;
   confirmBox('确定删除账户「'+it.name+'」吗？删除后该账户余额不再计入总资产。', function(){
     state.accounts=(state.accounts||[]).filter(function(a){return a.id!==id;});
-    save(); renderAssets(); fillAcctSelect('buyPayAcct'); refreshBuyRowAccts(); fillAcctSelect('sellAcct',(state.accounts.find(function(a){return a.name==='收款微信';})||{}).id);
+    save(); renderAssets(); fillAcctSelect('buyPayAcct'); fillAcctSelect('otherPayAcct'); refreshBuyRowAccts(); fillAcctSelect('sellAcct',(state.accounts.find(function(a){return a.name==='收款微信';})||{}).id);
     showTip('已删除 '+it.name);
   });
 }
@@ -2351,8 +2406,12 @@ function bindEvents(){
   $('#addOtherBtn').addEventListener('click',()=>{
     const cat=$('#otherCatInput').value, qty=parseFloat($('#otherQtyInput').value), price=parseFloat($('#otherPriceInput').value);
     const date=$('#otherDateInput').value||todayStr, note=$('#otherNoteInput').value.trim();
+    const acct=$('#otherPayAcct')?($('#otherPayAcct').value||null):null;
     if(!cat||!price||price<=0){ showTip('请填写种类和有效的单价'); return; }
-    state.otherItems.push({id:uid(),cat,date,unit:$('#otherUnitInput').value||'次',qty:qty||1,price,amount:money((qty||1)*price),note});
+    const amt=money((qty||1)*price);
+    state.otherItems.push({id:uid(),cat,date,unit:$('#otherUnitInput').value||'次',qty:qty||1,price,amount:amt,note,acct:acct||null});
+    // 从所选支付账户扣款
+    if(acct){ const a=acctById(acct); if(a) a.balance=money((a.balance||0)-amt); }
     save(); renderAll(); $('#otherNoteInput').value='';
     if(date!==todayStr) showTip(`已记录到 ${date}（非今日），今日表格不显示，可在「浏览全部记录」中查看`);
   });
@@ -2427,6 +2486,8 @@ function bindEvents(){
         <input id="mQty" type="number" value="${it.qty}" step="0.1" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">数量</p>
         <input id="mUnit" type="text" value="${it.unit||'次'}" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">单位</p>
         <input id="mPrice" type="number" value="${it.price}" step="0.1" class="w-full rounded-lg px-3 py-2 border border-gray-200"><p class="text-xs text-gray-400 mt-1">单价(元)</p>
+        <label class="block text-xs text-gray-500 mb-1 mt-1">支付方式</label>
+        <select id="mOtherAcct" class="w-full rounded-lg px-3 py-2 border border-gray-200 mb-2">${'<option value="">（不指定）</option>'+state.accounts.map(function(a){return '<option value="'+a.id+'"'+(a.id===it.acct?' selected':'')+'>'+esc(a.name)+'</option>';}).join('')}</select>
         <label class="block text-xs text-gray-500 mb-1">备注（选填）</label><textarea id="mNote" rows="3" class="w-full rounded-lg px-3 py-2 border border-gray-200 leading-relaxed">${esc(it.note||'')}</textarea>`,'编辑固定支出记录',true);
       editCtx={type:'other',id}; return; }
   });
@@ -2481,7 +2542,7 @@ function bindEvents(){
       const g=$('#naGroup')?$('#naGroup').value:editCtx.group;
       if(!g){ showTip('请选择账户类型'); return; }
       state.accounts.push({id:uid(),group:g,name:nm,balance:money(bal)});
-      save(); closeModal(); renderAssets(); fillAcctSelect('buyPayAcct'); refreshBuyRowAccts(); fillAcctSelect('sellAcct',(state.accounts.find(function(a){return a.name==='收款微信';})||{}).id);
+      save(); closeModal(); renderAssets(); fillAcctSelect('buyPayAcct'); fillAcctSelect('otherPayAcct'); refreshBuyRowAccts(); fillAcctSelect('sellAcct',(state.accounts.find(function(a){return a.name==='收款微信';})||{}).id);
       return;
     }
     const qty=parseFloat($('#mQty').value), price=parseFloat($('#mPrice').value), unit=($('#mUnit')?$('#mUnit').value:'斤'), date=($('#mDate')?$('#mDate').value:null), note=($('#mNote')?$('#mNote').value.trim():'');
@@ -2501,7 +2562,19 @@ function bindEvents(){
       // 同步更新关联票据行
       state.tickets.forEach(tk=>{ const r=tk.rows.find(r=>r.src===editCtx.id); if(r){ r.qty=qty||1; r.price=price; } });
     }
-    else if(editCtx.type==='other'){ const it=state.otherItems.find(x=>x.id===editCtx.id); it.qty=qty||1; it.unit=unit||'次'; it.price=price; it.amount=money((qty||1)*price); if(date)it.date=date; it.note=note; }
+    else if(editCtx.type==='other'){ const it=state.otherItems.find(x=>x.id===editCtx.id);
+      const newAcct=$('#mOtherAcct')?($('#mOtherAcct').value||null):(it.acct||null);
+      const oldAcct=it.acct||null, oldAmount=Number(it.amount)||0;
+      it.qty=qty||1; it.unit=unit||'次'; it.price=price; it.amount=money((qty||1)*price); if(date)it.date=date; it.note=note;
+      const newAmount=Number(it.amount)||0;
+      if(newAcct!==oldAcct){
+        if(oldAcct){ const a=acctById(oldAcct); if(a) a.balance=money((a.balance||0)+oldAmount); }
+        if(newAcct){ const a=acctById(newAcct); if(a) a.balance=money((a.balance||0)-newAmount); }
+      } else if(newAcct && newAmount!==oldAmount){
+        const a=acctById(newAcct); if(a) a.balance=money((a.balance||0)-(newAmount-oldAmount));
+      }
+      it.acct=newAcct||null;
+    }
     else {
       const it=state.sellItems.find(x=>x.id===editCtx.id);
       const newAcct=$('#mSellAcct')?($('#mSellAcct').value||null):(it.acct||null);
@@ -2522,8 +2595,224 @@ function bindEvents(){
 
 function renderAll(){ renderHome(); renderAssets(); renderBuyCats(); renderBuyUnits(); renderSellCats(); renderOtherCats(); renderOtherUnits(); renderBuyTable(); renderSellTable(); renderOtherTable(); renderSummaryBars(); renderDailySummary(); renderTickets(); }
 
+/* ---------------- 图片 / 小票 生成支出 ---------------- */
+let OCRROWS=[];
+let OCRBUSY=false;
+window._ocrFile=null;
+
+function openOcrModal(){
+  const m=$('#ocrModal'); if(!m) return;
+  OCRROWS=[]; window._ocrFile=null;
+  $('#ocrImg').innerHTML='<p class="text-xs text-gray-400 text-center py-8">还没有选择图片</p>';
+  $('#ocrText').value=''; $('#ocrStatus').textContent='';
+  $('#ocrDate').value=todayStr;
+  $('#ocrMakeTk').checked=true;
+  $('#ocrFile').value='';
+  fillAcctSelect('ocrAcct', $('#buyPayAcct')?($('#buyPayAcct').value||null):null);
+  const tks=[...state.tickets].sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''));});
+  $('#ocrTicketSel').innerHTML='<option value="">（选择一张已有小票）</option>'+tks.map(function(t){
+    const sum=(t.rows||[]).reduce(function(a,r){return a+money((Number(r.qty)||0)*(Number(r.price)||0));},0);
+    return '<option value="'+t.id+'">'+esc(t.date||'无日期')+' · '+esc(t.note||'小票')+' · '+(t.rows||[]).length+'行 · ¥'+money(sum)+'</option>';
+  }).join('');
+  renderOcrRows();
+  m.classList.remove('hidden');
+  switchOcrTab('img');
+}
+function closeOcrModal(){ const m=$('#ocrModal'); if(m) m.classList.add('hidden'); }
+function switchOcrTab(t){
+  const on='flex-1 rounded-lg py-2 text-sm font-medium bg-indigo-500 text-white';
+  const off='flex-1 rounded-lg py-2 text-sm font-medium bg-gray-100 text-gray-600';
+  const bi=$('#ocrTabImg'), bt=$('#ocrTabTk');
+  if(bi) bi.className=t==='img'?on:off;
+  if(bt) bt.className=t==='tk'?on:off;
+  const pi=$('#ocrPaneImg'), pt=$('#ocrPaneTk');
+  if(pi) pi.classList.toggle('hidden', t!=='img');
+  if(pt) pt.classList.toggle('hidden', t!=='tk');
+}
+
+function loadTesseract(){
+  return new Promise(function(res,rej){
+    if(window.Tesseract) return res(window.Tesseract);
+    const urls=['https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js','https://unpkg.com/tesseract.js@5/dist/tesseract.min.js'];
+    let i=0;
+    (function next(){
+      if(i>=urls.length) return rej(new Error('无法加载识别组件，请检查网络'));
+      const s=document.createElement('script');
+      s.src=urls[i++];
+      s.onload=function(){ window.Tesseract?res(window.Tesseract):next(); };
+      s.onerror=next;
+      document.head.appendChild(s);
+    })();
+  });
+}
+
+async function ocrRun(){
+  if(OCRBUSY) return;
+  if(!window._ocrFile){ showTip('请先选择一张图片'); return; }
+  OCRBUSY=true;
+  const btn=$('#ocrRunBtn'), st=$('#ocrStatus');
+  btn.disabled=true; btn.textContent='识别中…'; st.textContent='正在加载识别组件…';
+  try{
+    const T=await loadTesseract();
+    st.textContent='正在识别（首次较慢，请稍候）…';
+    const worker=await T.createWorker('chi_sim+eng',1,{logger:function(m){
+      if(m && m.status==='recognizing text'){ st.textContent='正在识别… '+Math.round((m.progress||0)*100)+'%'; }
+    }});
+    const ret=await worker.recognize(window._ocrFile);
+    await worker.terminate();
+    const text=(ret&&ret.data&&ret.data.text)||'';
+    $('#ocrText').value=text;
+    OCRROWS=parseReceiptText(text);
+    const d=guessReceiptDate(text); if(d) $('#ocrDate').value=d;
+    renderOcrRows();
+    st.textContent=OCRROWS.length?('识别完成，共 '+OCRROWS.length+' 行，请核对后生成'):'未识别出明细，可点「手动加一行」或重新拍清晰些';
+  }catch(e){
+    st.textContent='识别失败：'+((e&&e.message)||e);
+  }finally{
+    OCRBUSY=false; btn.disabled=false; btn.textContent='🔍 开始识别';
+  }
+}
+
+function guessReceiptDate(text){
+  const t=String(text||'');
+  let m=t.match(/(20\d{2})\s*[年\-\/.]\s*(\d{1,2})\s*[月\-\/.]\s*(\d{1,2})/);
+  if(m) return m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');
+  m=t.match(/(\d{1,2})\s*[月\-\/.]\s*(\d{1,2})\s*日?/);
+  if(m){ const y=new Date().getFullYear(); return y+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0'); }
+  return '';
+}
+
+function parseReceiptText(text){
+  const rows=[];
+  const skipKey=/(合计|总计|小计|应付|实付|支付|找零|优惠|折扣|数量|单价|金额|单号|票号|电话|手机|日期|时间|欢迎|谢谢|地址|收银|会员|积分|余额|税率|发票)/;
+  String(text||'').split(/\r?\n/).forEach(function(raw){
+    let s=raw.replace(/[¥￥$]/g,' ').replace(/\s+/g,' ').trim();
+    if(!s) return;
+    // 纯日期/时间/单号行跳过（去掉数字和日期符号后几乎没内容）
+    const core=s.replace(/-?\d+(?:\.\d+)?/g,' ').replace(/[年月日时分秒\s:：\-\/._]/g,'').trim();
+    if(core.length<2) return;
+    if(skipKey.test(s)) return;
+    const nums=(s.match(/-?\d+(?:\.\d+)?/g)||[]).map(Number).filter(function(n){return !isNaN(n);});
+    if(!nums.length) return;
+    let name=s.replace(/-?\d+(?:\.\d+)?/g,' ').replace(/[\sx×*:：/|,，.。_\-—]+/g,' ').trim();
+    if(name.length<2) return;
+    let qty=1, price=0;
+    if(nums.length>=2){ qty=nums[0]||1; price=nums[1]; }
+    else { qty=1; price=nums[0]; }
+    if(!price||price<=0||price>100000) return;
+    if(qty<=0||qty>10000) qty=1;
+    rows.push({cat:name.slice(0,20),qty:qty,price:price});
+  });
+  return rows.slice(0,30);
+}
+
+function renderOcrRows(){
+  const box=$('#ocrRows'); if(!box) return;
+  if(!OCRROWS.length){ box.innerHTML='<p class="text-xs text-gray-400 text-center py-4">暂无明细，可点「＋ 手动加一行」或先识别图片</p>'; updOcrSum(); return; }
+  box.innerHTML=OCRROWS.map(function(r,i){
+    return '<div class="ocr-row grid grid-cols-[1fr_54px_64px_64px_22px] gap-1.5 items-center">'
+      +'<input class="ocr-cat rounded-lg px-1.5 py-1.5 text-sm border border-gray-200 min-w-0" value="'+esc(r.cat)+'">'
+      +'<input class="ocr-qty rounded-lg px-1.5 py-1.5 text-sm border border-gray-200" type="number" min="0" step="0.1" value="'+(r.qty||1)+'">'
+      +'<input class="ocr-price rounded-lg px-1.5 py-1.5 text-sm border border-gray-200" type="number" min="0" step="0.01" value="'+(r.price||0)+'">'
+      +'<span class="ocr-amt text-right text-xs text-red-500 font-semibold whitespace-nowrap">¥'+money((Number(r.qty)||0)*(Number(r.price)||0))+'</span>'
+      +'<button class="ocr-del text-gray-400 hover:text-red-500 text-lg leading-none" data-i="'+i+'">×</button>'
+      +'</div>';
+  }).join('');
+  updOcrSum();
+}
+function ocrRowsData(){
+  const out=[];
+  $$('#ocrRows .ocr-row').forEach(function(r){
+    const cat=r.querySelector('.ocr-cat').value.trim();
+    const qty=parseFloat(r.querySelector('.ocr-qty').value)||1;
+    const price=parseFloat(r.querySelector('.ocr-price').value)||0;
+    out.push({cat:cat,qty:qty,price:price});
+  });
+  return out;
+}
+function updOcrSum(){
+  let s=0;
+  $$('#ocrRows .ocr-row').forEach(function(r){
+    const qty=parseFloat(r.querySelector('.ocr-qty').value)||0;
+    const price=parseFloat(r.querySelector('.ocr-price').value)||0;
+    const amt=money(qty*price);
+    const el=r.querySelector('.ocr-amt'); if(el) el.textContent='¥'+amt;
+    s+=amt;
+  });
+  const t=$('#ocrSum'); if(t) t.textContent='¥'+money(s).toFixed(2);
+}
+
+function loadTicketToOcr(){
+  const id=$('#ocrTicketSel')?$('#ocrTicketSel').value:'';
+  if(!id){ showTip('请先选择一张小票'); return; }
+  const tk=state.tickets.find(function(t){return t.id===id;});
+  if(!tk) return;
+  const rows=(tk.rows||[]).filter(function(r){return !r.src;}).map(function(r){
+    return {cat:r.name||'未命名',qty:Number(r.qty)||1,price:Number(r.price)||0};
+  });
+  if(!rows.length){ showTip('这张小票的明细都已关联支出，无需重复生成'); return; }
+  OCRROWS=rows;
+  if(tk.date) $('#ocrDate').value=tk.date;
+  renderOcrRows();
+  $('#ocrStatus').textContent='已从「'+(tk.date||'无日期')+'」小票载入 '+rows.length+' 行';
+}
+
+function genFromOcr(){
+  const rows=ocrRowsData().filter(function(x){return x.cat && x.price>0;});
+  if(!rows.length){ showTip('没有可生成的明细（品名和单价必填）'); return; }
+  const date=$('#ocrDate').value||todayStr;
+  const acct=$('#ocrAcct')?($('#ocrAcct').value||null):null;
+  const mkTk=$('#ocrMakeTk')?$('#ocrMakeTk').checked:false;
+  const note='图片/小票识别';
+  const ids=[];
+  rows.forEach(function(x){
+    if(state.buyCats.indexOf(x.cat)===-1) state.buyCats.push(x.cat);
+    const id=uid(); ids.push(id);
+    state.buyItems.push({id:id,cat:x.cat,date:date,unit:'件',qty:x.qty,price:x.price,amount:money(x.qty*x.price),note:note,acct:acct||null});
+  });
+  const total=rows.reduce(function(a,x){return a+money(x.qty*x.price);},0);
+  if(acct){ const a=acctById(acct); if(a) a.balance=money((a.balance||0)-total); }
+  if(mkTk){ state.tickets.push({id:uid(),date:date,note:note,rows:rows.map(function(x,i){return {name:x.cat,qty:x.qty,price:x.price,src:ids[i]};})}); }
+  save(); renderAll(); closeOcrModal();
+  showTip('已生成 '+rows.length+' 条支出，合计 ¥'+money(total).toFixed(2)+(acct?('，已从「'+((acctById(acct)||{}).name||'账户')+'」扣款'):''));
+}
+
+(function bindOcr(){
+  const b=$('#ocrBuyBtn'); if(b) b.addEventListener('click',openOcrModal);
+  const f=$('#ocrFile');
+  if(f) f.addEventListener('change',function(e){
+    const file=e.target.files&&e.target.files[0];
+    if(!file) return;
+    window._ocrFile=file;
+    const rd=new FileReader();
+    rd.onload=function(){
+      const img=$('#ocrImg');
+      img.innerHTML='';
+      const im=document.createElement('img'); im.src=rd.result; im.className='max-h-48 max-w-full object-contain';
+      img.appendChild(im);
+      const st=$('#ocrStatus'); if(st) st.textContent='已选择图片，点「开始识别」';
+    };
+    rd.readAsDataURL(file);
+  });
+  const rb=$('#ocrRunBtn'); if(rb) rb.addEventListener('click',ocrRun);
+  const lt=$('#ocrLoadTkBtn'); if(lt) lt.addEventListener('click',loadTicketToOcr);
+  const gb=$('#ocrGenBtn'); if(gb) gb.addEventListener('click',genFromOcr);
+  const ab=$('#ocrAddRowBtn');
+  if(ab) ab.addEventListener('click',function(){ OCRROWS=ocrRowsData(); OCRROWS.push({cat:'',qty:1,price:0}); renderOcrRows(); });
+  const box=$('#ocrRows');
+  if(box){
+    box.addEventListener('input',function(e){
+      if(e.target.classList.contains('ocr-qty')||e.target.classList.contains('ocr-price')) updOcrSum();
+    });
+    box.addEventListener('click',function(e){
+      const d=e.target.closest('.ocr-del'); if(!d) return;
+      OCRROWS=ocrRowsData(); OCRROWS.splice(Number(d.dataset.i),1); renderOcrRows();
+    });
+  }
+})();
+
 /* ---------------- 启动 ---------------- */
-renderTodayStr(); renderAll(); bindEvents(); fillAcctSelect('buyPayAcct'); resetBuyRows(); resetSellRows(); updSellAuto(); fillAcctSelect('sellAcct',(state.accounts.find(function(a){return a.name==='收款微信';})||{}).id); syncInit();
+renderTodayStr(); renderAll(); bindEvents(); fillAcctSelect('buyPayAcct'); fillAcctSelect('otherPayAcct'); resetBuyRows(); resetSellRows(); updSellAuto(); fillAcctSelect('sellAcct',(state.accounts.find(function(a){return a.name==='收款微信';})||{}).id); syncInit();
 $('#buyDateInput').value=todayStr; $('#sellDateInput').value=todayStr; $('#otherDateInput').value=todayStr;
 </script>
 </body>
